@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Exemplo 1: The Sixth and Final</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	</head>
+	<body>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "./js/three/three.module.js",
+					"three/addons/": "./js/jsm/",
+					"main" : "./js/main.js"
+				}
+			}
+		</script>
+
+		<script type="module">
+			import * as THREE from 'three';
+			import { init } from 'main';
+			
+			init(THREE);
+		</script>
+	</body>
+</html>
