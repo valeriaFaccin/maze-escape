@@ -1,3 +1,5 @@
+// https://www.mixamo.com/#/?page=1&type=Motion%2CMotionPack
+
 import * as THREE from 'three';
 import {GUI} from 'three/addons/libs/lil-gui.module.min.js';
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
@@ -14,7 +16,13 @@ var lastAnimation;
 var loadFinished = false;
 var walking = false;
 var walkingLeft = false;
+var walkingInto = false;
+var walkingS = false;
 var clock = new THREE.Clock();
+var objLoader = new OBJLoader();
+var fbxLoader = new FBXLoader();
+var arrayCharactersPositions = [];
+var currentGuy;
 
 let ambientLight, sunLight;
 let dirLight, dirLightHelper;
@@ -245,9 +253,7 @@ var createGui = function(){
 }
 
 var loadObj = function(){
-    let objLoader = new OBJLoader();
-    let fbxLoader = new FBXLoader();
-    let textLoader = new THREE.TextureLoader();
+    // let textLoader = new THREE.TextureLoader();
 
     objLoader.load (
         "assets/Wolf.obj",
@@ -265,57 +271,32 @@ var loadObj = function(){
             
         },
         function(progress){
-            //console.log("ta vivo! "+(progress.loaded/progress.total)*100 + "%");
+            // console.log("vivo! "+(progress.loaded/progress.total)*100 + "%");
         },
         function(error){
-            //console.log("Deu merda " + error);
+            // console.log("morto " + error);
         }
     );
 
     fbxLoader.load (
-        "assets/fbx/Dragon3.fbx",
+        "assets/Character/Running.fbx",
         function(obj){
             obj.traverse(function (child){
                 if (child instanceof THREE.Mesh){
-                    let texture = textLoader.load("assets/fbx/Dragon_ground_color.jpg");
-                    child.material =  new THREE.MeshStandardMaterial({map: texture});
-                    child.castShadow = true;
-                    child.receiveShadow = true;
+                    // let texture = textLoader.load("assets/fbx/Dragon_ground_color.jpg");
+                    // child.material =  new THREE.MeshStandardMaterial({map: texture});
+                    // child.castShadow = true;
+                    // child.receiveShadow = true;
                 }
             });
-            scene.add(obj);
+            // scene.add(obj);
             objects["dragon"] = obj;
             obj.position.x = -10;
-            obj.scale.x = obj.scale.y = obj.scale.z = 0.01;
+            obj.scale.x = obj.scale.y = obj.scale.z = 0.2;
             obj.position.y -= 5.8;
-            obj.rotation.y = Math.PI / 2;
+            arrayCharactersPositions['running'] = obj;
 
-
-            //Animation stuff
-            let animation;
-
-            mixer = new THREE.AnimationMixer(obj);
-
-            //voando
-            animation = mixer.clipAction(obj.animations[1]);
-            animationActions.push(animation);
-
-            //andando
-            animation = mixer.clipAction(obj.animations[0]);
-            animationActions.push(animation);
-
-            //idle
-            animation = mixer.clipAction(obj.animations[2]);
-            animationActions.push(animation);
-
-             //apertado banheiro
-            animation = mixer.clipAction(obj.animations[3]);
-            animationActions.push(animation);
-
-            activeAnimation = animation;
-            setAction (animationActions[2]);
-            loadFinished = true;
-            activeAnimation.play();
+            // animationOfCharacter(obj);
         },
         function(progress){
             console.log("vivo! "+(progress.loaded/progress.total)*100 + "%");
@@ -324,6 +305,53 @@ var loadObj = function(){
             console.log("morto " + error);
         }
     );
+
+    fbxLoader.load (
+        "assets/Character/BreathingIdle.fbx",
+        function(obj){
+            obj.traverse(function (child){
+                if (child instanceof THREE.Mesh){
+                }
+            });
+            objects["dragon"] = obj;
+            obj.position.x = -10;
+            obj.scale.x = obj.scale.y = obj.scale.z = 0.2;
+            obj.position.y -= 5.8;
+            arrayCharactersPositions['idle'] = obj;
+            currentGuy = arrayCharactersPositions['idle'];
+
+            // animationOfCharacter(obj);
+        },
+        function(progress){
+            console.log("vivo! "+(progress.loaded/progress.total)*100 + "%");
+        },
+        function(error){
+            console.log("morto " + error);
+        }
+    );
+}
+
+const animationOfCharacter = (obj) => {
+    let animation;
+    mixer = new THREE.AnimationMixer(obj);
+    //voando
+    animation = mixer.clipAction(obj.animations[1]);
+    animationActions.push(animation);
+    //andando
+    animation = mixer.clipAction(obj.animations[0]);
+    animationActions.push(animation);
+
+    // //idle
+    // animation = mixer.clipAction(obj.animations[2]);
+    // animationActions.push(animation);
+    //  //apertado banheiro
+    // animation = mixer.clipAction(obj.animations[3]);
+    // animationActions.push(animation);
+
+    activeAnimation = animation;
+    setAction (animationActions[1]);
+    loadFinished = true;
+    activeAnimation.play();
 }
 
 export function init() {
@@ -342,6 +370,9 @@ export function init() {
     createPointLight(parametrosGui);
     createGui();
     loadObj();
+    createGround();
+    makeTheCharacterMove();
+    scene.add(currentGuy);
 
     camera.position.z = 60;
     renderer.setAnimationLoop( nossaAnimacao );
@@ -351,7 +382,68 @@ export function init() {
 
     scene.fog = new THREE.Fog(0xcccccc, 10, 500);
 
-    // GROUND --------------
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousemove', makeMove);
+    document.addEventListener('mouseup', clickOn);
+    document.addEventListener('mousedown', ClickOff);
+
+    window.addEventListener( 'resize', onWindowResize );
+}
+
+const makeTheCharacterMove = () => {
+    document.addEventListener('keydown', (e) => {
+        if (!arrayCharactersPositions['running']) return;
+        currentGuy = arrayCharactersPositions['running'];
+
+        if (e.code === "KeyW" && !walking) {
+            walkingInto = true;
+            setAction(animationActions[1]);
+        }
+
+        if (e.code === "KeyD" && !walking) {
+            walking = true;
+            setAction(animationActions[1]);
+        }
+
+        if (e.code === "KeyA" && !walkingLeft) {
+            walkingLeft = true;
+            setAction(animationActions[1]);
+        }
+
+        if (e.code === "KeyS" && !walkingS) {
+            walkingS = true;
+            setAction(animationActions[1]);
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (!arrayCharactersPositions['idle']) return;
+        currentGuy = arrayCharactersPositions['idle'];
+
+        if (e.code === "KeyW") {
+            walkingInto = false;
+            setAction(animationActions[0]);
+        }
+
+        if (e.code === "KeyD") {
+            walking = false;
+            setAction(animationActions[0]);
+        }
+
+        if (e.code === "KeyA") {
+            walkingLeft = false;
+            setAction(animationActions[0]);
+        }
+
+        if (e.code === "KeyS") {
+            walkingS = false;
+            setAction(animationActions[0]);
+        }
+    });
+}
+
+// GROUND --------------
+const createGround = () => {
     let textLoader = new THREE.TextureLoader();
     let textGround = textLoader.load("assets/grasslight-big.jpg");
     textGround.wrapS = textGround.wrapT = THREE.RepeatWrapping;
@@ -368,58 +460,11 @@ export function init() {
 
     ground.receiveShadow = true;
     scene.add(ground);
-    // --------------------
-
-    // DRAGON WALKIN/FLYING
-    document.addEventListener('keydown', (e) => {
-        if (e.code === "KeyW" && !walking && objects['dragon'].rotation.y > 0) {
-            walking = true;
-            setAction(animationActions[0]);
-        }
-
-        if (e.code === "KeyW" && !walkingLeft && objects['dragon'].rotation.y < 0) {
-            walkingLeft = true;
-            setAction(animationActions[0]);
-        }
-
-        if (e.code === "KeyD" && !walking) {
-            walking = true;
-            setAction(animationActions[1]);
-        }
-
-        if (e.code === "KeyA" && !walkingLeft) {
-            walkingLeft = true;
-            setAction(animationActions[1]);
-        }
-    });
-
-    document.addEventListener('keyup', (e) => {
-        if (e.code === "KeyW" || e.code === "KeyD") {
-            walking = false;
-            walkingLeft = false;
-            setAction(animationActions[2]);
-        }
-
-        if (e.code === 'KeyA') {
-            walking = false;
-            walkingLeft = false;
-            setAction(animationActions[2]);
-        }
-    });
-    // ----------------------
-
-    // document.addEventListener('keydown', onKeyDown);
-    // document.addEventListener('mousemove', makeMove);
-    // document.addEventListener('mouseup', clickOn);
-    // document.addEventListener('mousedown', ClickOff);
-
-    window.addEventListener( 'resize', onWindowResize );
 }
 
 /**
  * Section of Animation
- */
-
+*/
 var nossaAnimacao = function () {
     let delta = clock.getDelta();
     
@@ -436,6 +481,18 @@ var nossaAnimacao = function () {
             objects['dragon'].rotation.y = -Math.PI / 2;
             objects['dragon'].position.x -= 0.5;
             camera.position.x -= 0.5;
+        }
+
+        if (walkingInto) {
+            objects['dragon'].rotation.y = 0;
+            objects['dragon'].position.z += 0.5;
+            camera.position.z += 0.5;
+        }
+
+        if (walkingS) {
+            objects['dragon'].rotation.y = Math.PI;
+            objects['dragon'].position.z -= 0.5;
+            camera.position.z -= 0.5;
         }
     }
 
