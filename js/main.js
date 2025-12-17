@@ -9,20 +9,26 @@ let camera, scene, renderer, controls;
 let gamePaused = false;
 let objects = [];
 
-let character;
-const actions = {};
-let activeAction;
-
 const move = { forward: false, backward: false, left: false, right: false };
 
-var mixer;
 var clock = new THREE.Clock();
-var loadFinished = false;
 
 let ambientLight, sunLight, dirLight, pointLight;
 
 var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
+
+// CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
+
+var createAnimatedState = function(root) {
+    return {
+        root,
+        mixer: new THREE.AnimationMixer(root),
+        actions: {},
+        active: null,
+    }
+}
+
 
 // LIGHT --------------------------------------------------------------------------------------------------------------------------------------
 
@@ -99,25 +105,51 @@ var loadObj = function(){
     );
 
     fbxLoader.load("assets/Character/avatar-idle.fbx",
-        function(obj) {
-            character = obj;
-            character.scale.x = character.scale.y = character.scale.z = 0.2;
-            character.position.x = -10;
-            character.position.y = -5;
-            character.position.z = 0;
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.position.x = -10;
+            fbx.position.y = -5;
+            fbx.position.z = 0;
 
-            scene.add(character);
-            mixer = new THREE.AnimationMixer(character);
+            scene.add(fbx);
 
-            actions.idle = mixer.clipAction(obj.animations[0]);
-            actions.idle.play();
-            loadFinished = true;
+            objects["jeomar"] = createAnimatedState(fbx);
+            objects["jeomar"].actions.idle = objects["jeomar"].mixer.clipAction(fbx.animations[0]);
+            objects["jeomar"].actions.idle.play();
+            objects["jeomar"].active = objects["jeomar"].actions.idle;
 
-            activeAction = actions.idle;
-            loadRunningAnimation();
+            loadAnimation(objects["jeomar"], "run", "assets/Character/avatar-running.fbx");
+            loadAnimation(objects["jeomar"], "hit", "assets/Character/got-hit.fbx");
+            loadAnimation(objects["jeomar"], "murdered", "assets/Character/brutally-assassinated.fbx");
         },
         function(progress){
-            console.log("vivo! "+(progress.loaded/progress.total)*100 + "%");
+            console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+        },
+        function(error){
+            console.log("morto " + error);
+        }
+    );
+
+    fbxLoader.load("assets/Villain/ninja-idle.fbx",
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.position.x = -20;
+            fbx.position.y = -5;
+            fbx.position.z = 0;
+            scene.add(fbx);
+
+            objects["students"] = createAnimatedState(fbx);
+            objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
+
+            // objects["students"].actions.tocaia.setLoop(THREE.LoopOnce).clampWhenFinished = true;
+
+            objects["students"].actions.tocaia.play();
+            objects["students"].active = objects["students"].actions.tocaia;
+
+            loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
+        },
+        function(progress){
+            console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
         },
         function(error){
             console.log("morto " + error);
@@ -129,7 +161,7 @@ var loadObj = function(){
 
 const makeTheCharacterMove = () => {
     document.addEventListener('keydown', (e) => {
-        setAction("run");
+        setAction(objects["jeomar"], "run");
 
         if (e.code === 'KeyW') move.forward = false;
         if (e.code === 'KeyS') move.backward = false;
@@ -137,10 +169,9 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyD') move.right = false;
     });
 
-
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keyup', (e) => {
         loadFinished = true;
-        setAction("idle");
+        setAction(objects["jeomar"], "idle");
 
         if (e.code === 'KeyW') move.forward = true;
         if (e.code === 'KeyS') move.backward = true;
@@ -157,9 +188,7 @@ const makeTheCharacterMove = () => {
 
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
 
-// -----------------------
 // Loop de animação + física
-// -----------------------
 function clampHorizontalVelocity(body, max) {
     const vx = body.velocity.x, vz = body.velocity.z;
     const speed = Math.hypot(vx, vz);
@@ -178,31 +207,43 @@ function pauseGame() {
 const MAX_SPEED = 25.5;      // m/s no plano XZ
 const ACCEL = 300.0;        // aceleração (impulso por segundo)
 
-function loadRunningAnimation() {
-    fbxLoader.load("assets/Character/avatar-running.fbx", 
-        function(obj) {
-            const runClip = obj.animations[0];
-            actions.run = mixer.clipAction(runClip);
-        }
-    );
+var loadAnimation = function(state, name, url, options = {}) {
+    fbxLoader.load(url, function(fbx) {
+        const action = state.mixer.clipAction(fbx.animations[0]);
+
+        // if (options.loop !== undefined) {
+        //     action.setLoop(options.loop);
+        // }
+
+        // if (options.clampWhenFinished) {
+        //     action.clampWhenFinished = true;
+        // }
+
+        state.actions[name] = action;
+    });
 }
 
-function setAction(name) {
-    const newAction = actions[name];
-    if (!newAction || newAction === activeAction) return;
+var setAction = function(state, name) {
+    const newAction = state.actions[name];
+    if (!newAction || newAction === state.active) return;
 
-    activeAction.fadeOut(0.2);
+    if (state.active) {
+        state.active.fadeOut(0.2);
+    }
 
-    newAction
-        .reset()
-        .fadeIn(0.2)
-        .play();
-
-    activeAction = newAction;
+    newAction.reset().fadeIn(0.2).play();
+    state.active = newAction;
 }
 
 var nossaAnimacao = function (playerBody, world) {
     let delta = clock.getDelta();
+
+    for (const key in objects) {
+        const obj = objects[key];
+        if (obj.mixer) {
+            obj.mixer.update(delta);
+        }
+    }
 
     if (gamePaused) return;
     console.log("entrou na animacao");
