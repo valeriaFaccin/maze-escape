@@ -1,13 +1,20 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import {Maze} from './maze.js'
+import { PhysicsEngine } from './physicsEngine.js';
 
-let camera, scene, renderer;
+
+let camera, scene, renderer, controls;
+let gamePaused = false;
 let objects = [];
 
 let character;
 const actions = {};
 let activeAction;
+
+const move = { forward: false, backward: false, left: false, right: false };
 
 var mixer;
 var clock = new THREE.Clock();
@@ -168,6 +175,27 @@ const makeTheCharacterMove = () => {
 
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
 
+// -----------------------
+// Loop de animação + física
+// -----------------------
+function clampHorizontalVelocity(body, max) {
+    const vx = body.velocity.x, vz = body.velocity.z;
+    const speed = Math.hypot(vx, vz);
+    if (speed > max) {
+        const s = max / speed;
+        body.velocity.x *= s;
+        body.velocity.z *= s;
+    }
+}
+
+function pauseGame() {
+    gamePaused = true;
+    if (controls.isLocked) controls.unlock();
+}
+
+const MAX_SPEED = 25.5;      // m/s no plano XZ
+const ACCEL = 300.0;        // aceleração (impulso por segundo)
+
 function loadRunningAnimation() {
     fbxLoader.load("assets/Character/avatar-running.fbx", 
         function(obj) {
@@ -191,38 +219,98 @@ function setAction(name) {
     activeAction = newAction;
 }
 
-var nossaAnimacao = function () {
+var nossaAnimacao = function (playerBody, world) {
     let delta = clock.getDelta();
-    
-    if (loadFinished) {
-        mixer.update(delta);
 
-        if (isMovingRight) {
-            character.rotation.y = Math.PI / 2;
-            character.position.x += 0.5;
-            camera.position.x += 0.5;
+    if (gamePaused) return;
+    console.log("entrou na animacao");
+    // dt com limite para estabilidade
+    const dt = Math.min(clock.getDelta(), 1 / 30);
+    // Direções baseadas na câmera
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0; forward.normalize();
+
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+    // Movimento (aplica velocidade ao corpo físico, não move diretamente a câmera)
+
+    console.log("controls.isLocked", controls.isLocked);
+    if (controls.isLocked) {
+        const moveVec = new THREE.Vector3();
+        if (move.forward)  moveVec.add(forward);
+        if (move.backward) moveVec.addScaledVector(forward, -1);
+        if (move.left)     moveVec.addScaledVector(right, -1);
+        if (move.right)    moveVec.add(right);
+        console.log("moveVec", moveVec);
+        if (moveVec.lengthSq() > 0) {
+            moveVec.normalize();
+
+
+            // garanta que não está dormindo ao aplicar input
+            playerBody.wakeUp();
+            console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
+
+            // aceleração acumulada em velocidade no plano XZ
+            playerBody.velocity.x += moveVec.x * ACCEL * dt;
+            playerBody.velocity.z += moveVec.z * ACCEL * dt;
+            console.log(playerBody.velocity.x);
+            console.log(playerBody.velocity.z);
+        } else {
+        // sem input — damping já segura o corpo
         }
 
-        if (isMovingLeft) {
-            character.rotation.y = -Math.PI / 2;
-            character.position.x -= 0.5;
-            camera.position.x -= 0.5;
-        }
-
-        if (isMovingForward) {
-            character.rotation.y = 0;
-            character.position.z += 0.5;
-            camera.position.z += 0.5;
-        }
-
-        if (isMovingBackward) {
-            character.rotation.y = Math.PI;
-            character.position.z -= 0.5;
-            camera.position.z -= 0.5;
-        }
+        clampHorizontalVelocity(playerBody, MAX_SPEED);
     }
 
+    // Step da física (fixo) com substep relativo ao dt
+    world.step(1 / 60, dt, 3);
+
+  // Câmera segue o corpo
+    const eyeHeight = 0.5;
+    console.log(playerBody.position.x);
+    console.log(playerBody.position.y + eyeHeight);
+    console.log(playerBody.position.z);
+
+    camera.position.set(
+        playerBody.position.x,
+        playerBody.position.y + eyeHeight,
+        playerBody.position.z
+    );
+
     renderer.render(scene, camera);
+    return ; // vou nem comentar o resto para evitar os conflito
+
+    
+    // if (loadFinished) {
+    //     mixer.update(delta);
+
+    //     if (isMovingRight) {
+    //         character.rotation.y = Math.PI / 2;
+    //         character.position.x += 0.5;
+    //         camera.position.x += 0.5;
+    //     }
+
+    //     if (isMovingLeft) {
+    //         character.rotation.y = -Math.PI / 2;
+    //         character.position.x -= 0.5;
+    //         camera.position.x -= 0.5;
+    //     }
+
+    //     if (isMovingForward) {
+    //         character.rotation.y = 0;
+    //         character.position.z += 0.5;
+    //         camera.position.z += 0.5;
+    //     }
+
+    //     if (isMovingBackward) {
+    //         character.rotation.y = Math.PI;
+    //         character.position.z -= 0.5;
+    //         camera.position.z -= 0.5;
+    //     }
+    // }
+
+    // renderer.render(scene, camera);
 };
 
 // GROUND -------------------------------------------------------------------------------------------------------------------------------------
@@ -305,6 +393,56 @@ export function init() {
     scene.fog = new THREE.Fog(0x0b1324, 20, 300);
 
     window.addEventListener( 'resize', onWindowResize );
+}
+
+export function init() {
+    const physicsEngine = new PhysicsEngine();
+    let world = physicsEngine.world;
+    let physics = physicsEngine.materials;
+
+    camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
+    controls = new PointerLockControls(camera, renderer.domElement);
+
+    const maze = new Maze(20, 10, 10);
+    maze.setup();
+    maze.generateMaze();
+    maze.buildMaze(scene, world, physics);
+
+    // Câmera: olhar para centro
+    camera.lookAt(new THREE.Vector3(maze.columns * 5, 1, maze.rows * 5));
+    // --------------------
+
+    const cellSize = 40;
+    const startX = cellSize / 2;
+    const startZ = cellSize / 2;
+
+    const PLAYER_RADIUS = 2;   // raio da esfera do jogador
+    const playerBody = physicsEngine.createPlayerBody({ radius: 2, mass: 80 });      // em segundos
+
+    // Altura dos olhos (câmera segue o corpo)
+    camera.position.set(playerBody.position.x, playerBody.position.y + 2.0, playerBody.position.z);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyW') move.forward = true;
+        if (e.code === 'KeyS') move.backward = true;
+        if (e.code === 'KeyA') move.left = true;
+        if (e.code === 'KeyD') move.right = true;
+        if (e.code === 'Escape') pauseGame();
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'KeyW') move.forward = false;
+        if (e.code === 'KeyS') move.backward = false;
+        if (e.code === 'KeyA') move.left = false;
+        if (e.code === 'KeyD') move.right = false;
+    });
+    window.addEventListener('click', () => controls.lock());
+
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+    window.addEventListener('blur', () => pauseGame());
+
+    // Loop
+    const animationLoop = () => nossaAnimacao(playerBody, world);
+    renderer.setAnimationLoop(animationLoop);
 }
 
 function onWindowResize() {
