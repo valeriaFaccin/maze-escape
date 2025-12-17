@@ -2,10 +2,18 @@ import * as THREE from 'three';
 import {GUI} from 'three/addons/libs/lil-gui.module.min.js';
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import {Maze} from './maze.js'
+import { PhysicsEngine } from './physicsEngine.js';
 
-let camera, scene, renderer;
+
+let camera, scene, renderer, controls;
+let gamePaused = false;
+let maze = null;
 let objects = [];
 let parametrosGui;
+
+const move = { forward: false, backward: false, left: false, right: false };
 
 var mixer;
 var animationActions = [];
@@ -126,6 +134,7 @@ parametrosGui = {
 
 
 var createGui = function(){
+    return; 
     const gui = new GUI();
 
     let light = gui.addFolder('Light');
@@ -272,79 +281,36 @@ var loadObj = function(){
         }
     );
 
-    fbxLoader.load (
-        "assets/fbx/Dragon3.fbx",
-        function(obj){
-            obj.traverse(function (child){
-                if (child instanceof THREE.Mesh){
-                    let texture = textLoader.load("assets/fbx/Dragon_ground_color.jpg");
-                    child.material =  new THREE.MeshStandardMaterial({map: texture});
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
-            scene.add(obj);
-            objects["dragon"] = obj;
-            obj.position.x = -10;
-            obj.scale.x = obj.scale.y = obj.scale.z = 0.01;
-            obj.position.y -= 5.8;
-            obj.rotation.y = Math.PI / 2;
 
-
-            //Animation stuff
-            let animation;
-
-            mixer = new THREE.AnimationMixer(obj);
-
-            //voando
-            animation = mixer.clipAction(obj.animations[1]);
-            animationActions.push(animation);
-
-            //andando
-            animation = mixer.clipAction(obj.animations[0]);
-            animationActions.push(animation);
-
-            //idle
-            animation = mixer.clipAction(obj.animations[2]);
-            animationActions.push(animation);
-
-             //apertado banheiro
-            animation = mixer.clipAction(obj.animations[3]);
-            animationActions.push(animation);
-
-            activeAnimation = animation;
-            setAction (animationActions[2]);
-            loadFinished = true;
-            activeAnimation.play();
-        },
-        function(progress){
-            console.log("vivo! "+(progress.loaded/progress.total)*100 + "%");
-        },
-        function(error){
-            console.log("morto " + error);
-        }
-    );
 }
 
 export function init() {
+    const physicsEngine = new PhysicsEngine();
+    let world = physicsEngine.world;
+    let physics = physicsEngine.materials;
+
     camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xcce0ff);
+    scene.fog = new THREE.Fog(0xcccccc, 10, 500);
 
-    renderer = new THREE.WebGLRenderer( );
+    renderer = new THREE.WebGLRenderer({ antialias: true } );
     renderer.setSize( window.innerWidth, window.innerHeight );
     renderer.shadowMap.enabled = true;
 
+    document.body.appendChild(renderer.domElement);
+    controls = new PointerLockControls(camera, renderer.domElement);
+
     criaIluminacao(parametrosGui);
-    createDirectionalLight(parametrosGui);
-    createSpotLight(parametrosGui);
-    createPointLight(parametrosGui);
+    // createDirectionalLight(parametrosGui);
+    // createSpotLight(parametrosGui);
+    // createPointLight(parametrosGui);
     createGui();
     loadObj();
 
     camera.position.z = 60;
-    renderer.setAnimationLoop( nossaAnimacao );
+    // renderer.setAnimationLoop( nossaAnimacao );
     
     document.body.appendChild( renderer.domElement );
     renderer.render( scene, camera );
@@ -364,11 +330,30 @@ export function init() {
                                  materialGround);
 
     ground.rotation.x = -Math.PI/2;
-    ground.position.y-=6;
+    ground.position.y = 0; // alinhar com o plano y=0 da física
 
     ground.receiveShadow = true;
     scene.add(ground);
+
+
+    maze = new Maze(20, 10, 10);
+    maze.setup();
+    maze.generateMaze();
+    maze.buildMaze(scene, world, physics);
+
+    // Câmera: olhar para centro
+    camera.lookAt(new THREE.Vector3(maze.columns * 5, 1, maze.rows * 5));
     // --------------------
+
+    const cellSize = 40;
+    const startX = cellSize / 2;
+    const startZ = cellSize / 2;
+
+    const PLAYER_RADIUS = 2;   // raio da esfera do jogador
+    const playerBody = physicsEngine.createPlayerBody({ radius: 2, mass: 80 });      // em segundos
+
+    // Altura dos olhos (câmera segue o corpo)
+    camera.position.set(playerBody.position.x, playerBody.position.y + 2.0, playerBody.position.z);
 
     // DRAGON WALKIN/FLYING
     document.addEventListener('keydown', (e) => {
@@ -412,17 +397,119 @@ export function init() {
     // document.addEventListener('mousemove', makeMove);
     // document.addEventListener('mouseup', clickOn);
     // document.addEventListener('mousedown', ClickOff);
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyW') move.forward = true;
+        if (e.code === 'KeyS') move.backward = true;
+        if (e.code === 'KeyA') move.left = true;
+        if (e.code === 'KeyD') move.right = true;
+        if (e.code === 'Escape') pauseGame();
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'KeyW') move.forward = false;
+        if (e.code === 'KeyS') move.backward = false;
+        if (e.code === 'KeyA') move.left = false;
+        if (e.code === 'KeyD') move.right = false;
+    });
 
     window.addEventListener( 'resize', onWindowResize );
+    window.addEventListener('click', () => controls.lock());
+
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+    window.addEventListener('blur', () => pauseGame());
+
+    // Loop
+    const animationLoop = () => nossaAnimacao(playerBody, world);
+    renderer.setAnimationLoop(animationLoop);
+}
+
+// -----------------------
+// Loop de animação + física
+// -----------------------
+const MAX_SPEED = 25.5;      // m/s no plano XZ
+const ACCEL = 150.0;        // aceleração (impulso por segundo)
+
+function clampHorizontalVelocity(body, max) {
+    const vx = body.velocity.x, vz = body.velocity.z;
+    const speed = Math.hypot(vx, vz);
+    if (speed > max) {
+        const s = max / speed;
+        body.velocity.x *= s;
+        body.velocity.z *= s;
+    }
+}
+
+function pauseGame() {
+    gamePaused = true;
+    if (controls.isLocked) controls.unlock();
 }
 
 /**
  * Section of Animation
  */
+const speed = 20;
 
-var nossaAnimacao = function () {
+var nossaAnimacao = function (playerBody, world) {
     let delta = clock.getDelta();
-    
+    if (gamePaused) return;
+    console.log("entrou na animacao");
+    // dt com limite para estabilidade
+    const dt = Math.min(clock.getDelta(), 1 / 30);
+
+    // Direções baseadas na câmera
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0; forward.normalize();
+
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+    // Movimento (aplica velocidade ao corpo físico, não move diretamente a câmera)
+
+    console.log("controls.isLocked", controls.isLocked);
+    if (controls.isLocked) {
+        const moveVec = new THREE.Vector3();
+        if (move.forward)  moveVec.add(forward);
+        if (move.backward) moveVec.addScaledVector(forward, -1);
+        if (move.left)     moveVec.addScaledVector(right, -1);
+        if (move.right)    moveVec.add(right);
+        console.log("moveVec", moveVec);
+        if (moveVec.lengthSq() > 0) {
+            moveVec.normalize();
+
+
+            // garanta que não está dormindo ao aplicar input
+            playerBody.wakeUp();
+            console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
+
+            // aceleração acumulada em velocidade no plano XZ
+            playerBody.velocity.x += moveVec.x * ACCEL * dt;
+            playerBody.velocity.z += moveVec.z * ACCEL * dt;
+            console.log(playerBody.velocity.x);
+            console.log(playerBody.velocity.z);
+        } else {
+        // sem input — damping já segura o corpo
+        }
+
+        clampHorizontalVelocity(playerBody, MAX_SPEED);
+    }
+
+    // Step da física (fixo) com substep relativo ao dt
+    world.step(1 / 60, dt, 3);
+
+  // Câmera segue o corpo
+    const eyeHeight = 0.5;
+    console.log(playerBody.position.x);
+    console.log(playerBody.position.y + eyeHeight);
+    console.log(playerBody.position.z);
+
+    camera.position.set(
+        playerBody.position.x,
+        playerBody.position.y + eyeHeight,
+        playerBody.position.z
+    );
+
+    renderer.render(scene, camera);
+    return ; // vou nem comentar o resto para evitar os conflito
+
     if (loadFinished){
         mixer.update(delta);
 
