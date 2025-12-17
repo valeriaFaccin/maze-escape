@@ -5,7 +5,6 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import {Maze} from './maze.js'
 import { PhysicsEngine } from './physicsEngine.js';
 
-
 let camera, scene, renderer, controls;
 let gamePaused = false;
 let objects = [];
@@ -19,8 +18,6 @@ const move = { forward: false, backward: false, left: false, right: false };
 var mixer;
 var clock = new THREE.Clock();
 var loadFinished = false;
-
-var isMovingForward, isMovingBackward, isMovingLeft, isMovingRight = false;
 
 let ambientLight, sunLight, dirLight, pointLight;
 
@@ -134,43 +131,28 @@ const makeTheCharacterMove = () => {
     document.addEventListener('keydown', (e) => {
         setAction("run");
 
-        if (e.code === "KeyW" && !isMovingForward) {
-            isMovingForward = true;
-        }
-
-        if (e.code === "KeyD" && !isMovingRight) {
-            isMovingRight = true;
-        }
-
-        if (e.code === "KeyA" && !isMovingLeft) {
-            isMovingLeft = true;
-        }
-
-        if (e.code === "KeyS" && !isMovingBackward) {
-            isMovingBackward = true;
-        }
+        if (e.code === 'KeyW') move.forward = false;
+        if (e.code === 'KeyS') move.backward = false;
+        if (e.code === 'KeyA') move.left = false;
+        if (e.code === 'KeyD') move.right = false;
     });
 
-    document.addEventListener('keyup', (e) => {
+
+    document.addEventListener('keydown', (e) => {
         loadFinished = true;
         setAction("idle");
 
-        if (e.code === "KeyW") {
-            isMovingForward = false;
-        }
-
-        if (e.code === "KeyD") {
-            isMovingRight = false;
-        }
-
-        if (e.code === "KeyA") {
-            isMovingLeft = false;
-        }
-
-        if (e.code === "KeyS") {
-            isMovingBackward = false;
-        }
+        if (e.code === 'KeyW') move.forward = true;
+        if (e.code === 'KeyS') move.backward = true;
+        if (e.code === 'KeyA') move.left = true;
+        if (e.code === 'KeyD') move.right = true;
+        if (e.code === 'Escape') pauseGame();
     });
+
+    window.addEventListener('click', () => controls.lock());
+
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+    window.addEventListener('blur', () => pauseGame());
 }
 
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
@@ -279,38 +261,6 @@ var nossaAnimacao = function (playerBody, world) {
     );
 
     renderer.render(scene, camera);
-    return ; // vou nem comentar o resto para evitar os conflito
-
-    
-    // if (loadFinished) {
-    //     mixer.update(delta);
-
-    //     if (isMovingRight) {
-    //         character.rotation.y = Math.PI / 2;
-    //         character.position.x += 0.5;
-    //         camera.position.x += 0.5;
-    //     }
-
-    //     if (isMovingLeft) {
-    //         character.rotation.y = -Math.PI / 2;
-    //         character.position.x -= 0.5;
-    //         camera.position.x -= 0.5;
-    //     }
-
-    //     if (isMovingForward) {
-    //         character.rotation.y = 0;
-    //         character.position.z += 0.5;
-    //         camera.position.z += 0.5;
-    //     }
-
-    //     if (isMovingBackward) {
-    //         character.rotation.y = Math.PI;
-    //         character.position.z -= 0.5;
-    //         camera.position.z -= 0.5;
-    //     }
-    // }
-
-    // renderer.render(scene, camera);
 };
 
 // GROUND -------------------------------------------------------------------------------------------------------------------------------------
@@ -357,7 +307,7 @@ const createGround = () => {
 
     const ground = new THREE.Mesh(geometry, material);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -6;
+    ground.position.y = 0;
 
     ground.receiveShadow = true;
     scene.add(ground);
@@ -367,41 +317,12 @@ const createGround = () => {
 // INIT ---------------------------------------------------------------------------------------------------------------------------------------
 
 export function init() {
-    camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
-
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x101a2e);
-    scene.environment = new THREE.Color(0x1a233a);
-
-    renderer = new THREE.WebGLRenderer( );
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.shadowMap.enabled = true;
-
-    criaIluminacao();
-    createDirectionalLight();
-    createPointLight();
-    loadObj();
-    createGround();
-    makeTheCharacterMove();
-
-    camera.position.z = 60;
-    renderer.setAnimationLoop( nossaAnimacao );
-    
-    document.body.appendChild( renderer.domElement );
-    renderer.render( scene, camera );
-
-    scene.fog = new THREE.Fog(0x0b1324, 20, 300);
-
-    window.addEventListener( 'resize', onWindowResize );
-}
-
-export function init() {
     const physicsEngine = new PhysicsEngine();
     let world = physicsEngine.world;
     let physics = physicsEngine.materials;
 
     camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
-    controls = new PointerLockControls(camera, renderer.domElement);
+       
 
     const maze = new Maze(20, 10, 10);
     maze.setup();
@@ -410,40 +331,40 @@ export function init() {
 
     // Câmera: olhar para centro
     camera.lookAt(new THREE.Vector3(maze.columns * 5, 1, maze.rows * 5));
-    // --------------------
 
-    const cellSize = 40;
-    const startX = cellSize / 2;
-    const startZ = cellSize / 2;
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x101a2e);
+    scene.environment = new THREE.Color(0x1a233a);
 
-    const PLAYER_RADIUS = 2;   // raio da esfera do jogador
+    renderer = new THREE.WebGLRenderer({ antialias: true } );
+    renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.shadowMap.enabled = true;
+
+    document.body.appendChild(renderer.domElement);
+    controls = new PointerLockControls(camera, renderer.domElement);
+
     const playerBody = physicsEngine.createPlayerBody({ radius: 2, mass: 80 });      // em segundos
-
-    // Altura dos olhos (câmera segue o corpo)
     camera.position.set(playerBody.position.x, playerBody.position.y + 2.0, playerBody.position.z);
 
-    document.addEventListener('keydown', (e) => {
-        if (e.code === 'KeyW') move.forward = true;
-        if (e.code === 'KeyS') move.backward = true;
-        if (e.code === 'KeyA') move.left = true;
-        if (e.code === 'KeyD') move.right = true;
-        if (e.code === 'Escape') pauseGame();
-    });
-    document.addEventListener('keyup', (e) => {
-        if (e.code === 'KeyW') move.forward = false;
-        if (e.code === 'KeyS') move.backward = false;
-        if (e.code === 'KeyA') move.left = false;
-        if (e.code === 'KeyD') move.right = false;
-    });
-    window.addEventListener('click', () => controls.lock());
+    criaIluminacao();
+    createDirectionalLight();
+    createPointLight();
+    loadObj();
+    createGround();
+    makeTheCharacterMove();
 
-    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
-    window.addEventListener('blur', () => pauseGame());
-
-    // Loop
     const animationLoop = () => nossaAnimacao(playerBody, world);
-    renderer.setAnimationLoop(animationLoop);
+    renderer.setAnimationLoop( animationLoop );
+
+    document.body.appendChild( renderer.domElement );
+    renderer.render( scene, camera );
+    scene.fog = new THREE.Fog(0xcccccc, 10, 500);
+
+    scene.fog = new THREE.Fog(0x0b1324, 20, 300);
+
+    window.addEventListener( 'resize', onWindowResize );
 }
+
 
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
