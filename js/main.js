@@ -4,8 +4,9 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import {Maze} from './maze.js'
 import { PhysicsEngine } from './physicsEngine.js';
+import * as CANNON from 'cannon-es';
 
-let camera, scene, renderer, controls;
+let camera, scene, renderer, controls, playerBody, cameraYaw, cameraPitch;
 let gamePaused = false;
 let objects = [];
 
@@ -98,12 +99,23 @@ var loadObj = function(){
         }
     );
 
+        // Crie nós de orientação
+    cameraYaw = new THREE.Object3D();   // gira em Y (esquerda/direita)
+    cameraPitch = new THREE.Object3D(); // gira em X (cima/baixo)
+    cameraYaw.add(cameraPitch);
+    cameraPitch.add(camera);
+
+    // Offset dos olhos (em relação ao centro do corpo físico/personagem)
+    const EYE_HEIGHT = 1.6;     // ~altura dos olhos
+    camera.position.set(0, 0, 0);            // a câmera fica no pitch; o pitch será posicionado no olho
+    cameraPitch.position.set(0, EYE_HEIGHT, 0);
+
     fbxLoader.load("assets/Character/avatar-idle.fbx",
         function(obj) {
             character = obj;
             character.scale.x = character.scale.y = character.scale.z = 0.2;
             character.position.x = -10;
-            character.position.y = -5;
+            character.position.y = 1;
             character.position.z = 0;
 
             scene.add(character);
@@ -112,6 +124,11 @@ var loadObj = function(){
             actions.idle = mixer.clipAction(obj.animations[0]);
             actions.idle.play();
             loadFinished = true;
+
+   
+            // Acopla o rig de câmera ao personagem (na cabeça)
+            character.add(cameraYaw); // o yaw/pitch ficam como filhos do personagem
+            cameraYaw.position.set(0, 0, 0);
 
             activeAction = actions.idle;
             loadRunningAnimation();
@@ -126,9 +143,13 @@ var loadObj = function(){
 }
 
 // KEYBOARD EVENTS ----------------------------------------------------------------------------------------------------------------------------
+let mouseDX = 0, mouseDY = 0;
+let pitchLimit = THREE.MathUtils.degToRad(85);
+const yawSpeed = 0.002;   // sensibilidade horizontal
+const pitchSpeed = 0.002; // sensibilidade vertical
 
 const makeTheCharacterMove = () => {
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keyup', (e) => {
         setAction("run");
 
         if (e.code === 'KeyW') move.forward = false;
@@ -150,9 +171,24 @@ const makeTheCharacterMove = () => {
     });
 
     window.addEventListener('click', () => controls.lock());
+  
 
     document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+    document.addEventListener('mousemove', (e) => {
+        if (controls.isLocked) {
+            mouseDX = e.movementX || 0;
+            mouseDY = e.movementY || 0;
+        }
+    });
+
     window.addEventListener('blur', () => pauseGame());
+}
+
+function applyLookRotation() {
+    cameraYaw.rotation.y -= mouseDX * yawSpeed;
+    cameraPitch.rotation.x -= mouseDY * pitchSpeed;
+    cameraPitch.rotation.x = THREE.MathUtils.clamp(cameraPitch.rotation.x, -pitchLimit, pitchLimit);
+    mouseDX = mouseDY = 0;
 }
 
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
@@ -174,9 +210,8 @@ function pauseGame() {
     gamePaused = true;
     if (controls.isLocked) controls.unlock();
 }
-
 const MAX_SPEED = 25.5;      // m/s no plano XZ
-const ACCEL = 300.0;        // aceleração (impulso por segundo)
+const FORCE = 300.0;        // aceleração (impulso por segundo)
 
 function loadRunningAnimation() {
     fbxLoader.load("assets/Character/avatar-running.fbx", 
@@ -201,14 +236,61 @@ function setAction(name) {
     activeAction = newAction;
 }
 
+
+function getForwardVector() {
+    // Extrai direção “para frente” do rig (ignora componente Y para manter no plano)
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraYaw.quaternion);
+    forward.y = 0; forward.normalize();
+    return forward;
+}
+function getRightVector() {
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraYaw.quaternion);
+    right.y = 0; right.normalize();
+    return right;
+}
+
+function movePlayer(dt) {
+    if (!controls.isLocked) return;
+
+    const forward = getForwardVector();
+    const right   = getRightVector();
+
+    const moveVec = new THREE.Vector3();
+    if (move.forward)  moveVec.add(forward);
+    if (move.backward) moveVec.addScaledVector(forward, -1);
+    if (move.left)     moveVec.addScaledVector(right, -1);
+    if (move.right)    moveVec.add(right);
+
+    if (moveVec.lengthSq() > 0) {
+        moveVec.normalize();
+        playerBody.wakeUp();
+
+        // Aplicar força horizontal
+        const fx = moveVec.x * FORCE;
+        const fz = moveVec.z * FORCE;
+        playerBody.applyForce(new CANNON.Vec3(fx, 0, fz), playerBody.position);
+
+        // Limitar velocidade horizontal
+        const vx = playerBody.velocity.x, vz = playerBody.velocity.z;
+        const speed = Math.hypot(vx, vz);
+        if (speed > MAX_SPEED) {
+            const s = MAX_SPEED / speed;
+            playerBody.velocity.x *= s;
+            playerBody.velocity.z *= s;
+        }
+    }
+}
+
 var nossaAnimacao = function (playerBody, world) {
-    let delta = clock.getDelta();
 
     if (gamePaused) return;
+    if(!loadFinished) return;
+
     console.log("entrou na animacao");
     // dt com limite para estabilidade
     const dt = Math.min(clock.getDelta(), 1 / 30);
     // Direções baseadas na câmera
+
     const forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
     forward.y = 0; forward.normalize();
@@ -224,7 +306,7 @@ var nossaAnimacao = function (playerBody, world) {
         if (move.backward) moveVec.addScaledVector(forward, -1);
         if (move.left)     moveVec.addScaledVector(right, -1);
         if (move.right)    moveVec.add(right);
-        console.log("moveVec", moveVec);
+        console.log("move", move);
         if (moveVec.lengthSq() > 0) {
             moveVec.normalize();
 
@@ -234,34 +316,68 @@ var nossaAnimacao = function (playerBody, world) {
             console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
 
             // aceleração acumulada em velocidade no plano XZ
-            playerBody.velocity.x += moveVec.x * ACCEL * dt;
-            playerBody.velocity.z += moveVec.z * ACCEL * dt;
+            playerBody.velocity.x += moveVec.x * FORCE * dt;
+            playerBody.velocity.z += moveVec.z * FORCE * dt;
             console.log(playerBody.velocity.x);
             console.log(playerBody.velocity.z);
-        } else {
-        // sem input — damping já segura o corpo
-        }
+        } 
 
         clampHorizontalVelocity(playerBody, MAX_SPEED);
     }
+    applyLookRotation();       // do mouse → yaw/pitch
+    movePlayer(dt);            // forças/velocidade
 
     // Step da física (fixo) com substep relativo ao dt
     world.step(1 / 60, dt, 3);
 
-  // Câmera segue o corpo
-    const eyeHeight = 0.5;
-    console.log(playerBody.position.x);
-    console.log(playerBody.position.y + eyeHeight);
-    console.log(playerBody.position.z);
-
-    camera.position.set(
-        playerBody.position.x,
-        playerBody.position.y + eyeHeight,
-        playerBody.position.z
-    );
-
+    syncVisualFromPhysics();
+    // Câmera segue o corpo
+ 
     renderer.render(scene, camera);
 };
+
+
+function createCapsuleBody({
+    radius = 0.35,         // raio do capsule (largura do corpo)
+    height = 1.7,          // altura total (pés até topo da cabeça)
+    mass = 80,
+    material,
+    start = new CANNON.Vec3(0, height/2 + 0.05, 0),
+    linearDamping = 0.15,
+    angularDamping = 1.0,
+    fixedRotation = true,
+    sleepSpeedLimit = 0.05,
+    sleepTimeLimit = 0.5,
+} = {}) {
+    // “Parte reta” entre as semiesferas
+    const cylinderHeight = Math.max(0.0001, height - 2 * radius);
+
+    const body = new CANNON.Body({ mass, material });
+    body.position.copy(start);
+    body.linearDamping = linearDamping;
+    body.angularDamping = angularDamping;
+    body.fixedRotation = fixedRotation;
+    body.sleepSpeedLimit = sleepSpeedLimit;
+    body.sleepTimeLimit  = sleepTimeLimit;
+
+    // Cilindro vertical (em Cannon, Cylinder está alinhado no eixo X por padrão — vamos rotacionar)
+    const cylShape = new CANNON.Cylinder(radius, radius, cylinderHeight, 8);
+    const cylQuat  = new CANNON.Quaternion();
+    // Rotaciona para ficar “em pé” ao longo do eixo Y
+    cylQuat.setFromEuler(0, 0, Math.PI / 2, 'XYZ');
+    body.addShape(cylShape, new CANNON.Vec3(0, 0, 0), cylQuat);
+
+    // Esfera de cima
+    const topSphere = new CANNON.Sphere(radius);
+    body.addShape(topSphere, new CANNON.Vec3(0, +cylinderHeight/2, 0));
+
+    // Esfera de baixo
+    const bottomSphere = new CANNON.Sphere(radius);
+    body.addShape(bottomSphere, new CANNON.Vec3(0, -cylinderHeight/2, 0));
+
+    return body;
+}
+
 
 // GROUND -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -298,7 +414,7 @@ const createGround = () => {
         roughness: 1
     });
 
-    const geometry = new THREE.PlaneGeometry(5000, 5000, 256, 256);
+    const geometry = new THREE.PlaneGeometry(500, 500, 256, 256);
 
     geometry.setAttribute(
         'uv2',
@@ -315,22 +431,15 @@ const createGround = () => {
 
 
 // INIT ---------------------------------------------------------------------------------------------------------------------------------------
+    const CAPSULE_HEIGHT = 1.7;
 
 export function init() {
     const physicsEngine = new PhysicsEngine();
     let world = physicsEngine.world;
     let physics = physicsEngine.materials;
 
+
     camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
-       
-
-    const maze = new Maze(20, 10, 10);
-    maze.setup();
-    maze.generateMaze();
-    maze.buildMaze(scene, world, physics);
-
-    // Câmera: olhar para centro
-    camera.lookAt(new THREE.Vector3(maze.columns * 5, 1, maze.rows * 5));
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x101a2e);
@@ -343,8 +452,31 @@ export function init() {
     document.body.appendChild(renderer.domElement);
     controls = new PointerLockControls(camera, renderer.domElement);
 
-    const playerBody = physicsEngine.createPlayerBody({ radius: 2, mass: 80 });      // em segundos
-    camera.position.set(playerBody.position.x, playerBody.position.y + 2.0, playerBody.position.z);
+    const maze = new Maze(20, 10, 10);
+    maze.setup();
+    maze.generateMaze();
+    maze.buildMaze(scene, world, physics);
+
+     // Câmera: olhar para centro
+    camera.lookAt(new THREE.Vector3(maze.columns * 5, 1, maze.rows * 5));
+
+    // Materiais previamente criados (conforme falamos antes)
+    const playerMaterial = physics.playerMaterial;
+
+    // Alturas
+    const CAPSULE_RADIUS = 0.35;
+    const START = new CANNON.Vec3(5, CAPSULE_HEIGHT/2 + 0.05, 5);
+  
+    // Corpo físico
+    playerBody = createCapsuleBody({
+        radius: CAPSULE_RADIUS,
+        height: CAPSULE_HEIGHT,
+        mass: 75,
+        material: playerMaterial,
+        start: START
+    });
+    world.addBody(playerBody);
+
 
     criaIluminacao();
     createDirectionalLight();
@@ -361,8 +493,21 @@ export function init() {
     scene.fog = new THREE.Fog(0xcccccc, 10, 500);
 
     scene.fog = new THREE.Fog(0x0b1324, 20, 300);
-
+    character.visible = false
     window.addEventListener( 'resize', onWindowResize );
+}
+
+// O rig segue o corpo (personagem e câmera juntos)
+function syncVisualFromPhysics() {
+  // posiciona o “root” do personagem no centro do corpo
+  character.position.set(
+    playerBody.position.x,
+    playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés (ajuste conforme pivô do FBX)
+    playerBody.position.z
+  );
+
+  // Também posiciona o rig (yaw/pitch) no centro do corpo
+  cameraYaw.position.set(playerBody.position.x, playerBody.position.y + 2, playerBody.position.z);
 }
 
 
