@@ -54,7 +54,7 @@ var luzAmbiente = function(){
 
 var createDirectionalLight = function () {
     dirLight = new THREE.DirectionalLight(0xcad7ff, 0.8);  
-    dirLight.position.set(300, 400, 200);
+    dirLight.position.set(200, 300, 100);
     dirLight.castShadow = true;
 
     dirLight.visible = true;
@@ -231,14 +231,14 @@ const createGround = () => {
     const textureLoader = new THREE.TextureLoader();
 
     const colorMap = textureLoader.load("assets/Ground/Ground_Color.jpg");
-    const normalMap = textureLoader.load("assets/Ground/Ground_NormalGL.jpg");
+    // const normalMap = textureLoader.load("assets/Ground/Ground_NormalGL.jpg");
     const roughnessMap = textureLoader.load("assets/Ground/Ground_Roughness.jpg");
     const aoMap = textureLoader.load("assets/Ground/Ground_AmbientOcclusion.jpg");
     const displacementMap = textureLoader.load("assets/Ground/Ground_Displacement.jpg");
 
     const textures = [
         colorMap,
-        normalMap,
+        // normalMap,
         roughnessMap,
         aoMap,
         displacementMap
@@ -252,7 +252,7 @@ const createGround = () => {
 
     const material = new THREE.MeshStandardMaterial({
         map: colorMap,
-        normalMap: normalMap,
+        // normalMap: normalMap,
         roughnessMap: roughnessMap,
         aoMap: aoMap,
         displacementMap: displacementMap,
