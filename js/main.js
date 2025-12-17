@@ -9,7 +9,6 @@ import { PhysicsEngine } from './physicsEngine.js';
 
 let camera, scene, renderer, controls;
 let gamePaused = false;
-let maze = null;
 let objects = [];
 let parametrosGui;
 
@@ -336,7 +335,7 @@ export function init() {
     scene.add(ground);
 
 
-    maze = new Maze(20, 10, 10);
+    const maze = new Maze(20, 10, 10);
     maze.setup();
     maze.generateMaze();
     maze.buildMaze(scene, world, physics);
@@ -356,41 +355,43 @@ export function init() {
     camera.position.set(playerBody.position.x, playerBody.position.y + 2.0, playerBody.position.z);
 
     // DRAGON WALKIN/FLYING
-    document.addEventListener('keydown', (e) => {
-        if (e.code === "KeyW" && !walking && objects['dragon'].rotation.y > 0) {
-            walking = true;
-            setAction(animationActions[0]);
-        }
+    // document.addEventListener('keydown', (e) => {
+    //     return ;
+    //     if (e.code === "KeyW" && !walking && objects['dragon'].rotation.y > 0) {
+    //         walking = true;
+    //         setAction(animationActions[0]);
+    //     }
 
-        if (e.code === "KeyW" && !walkingLeft && objects['dragon'].rotation.y < 0) {
-            walkingLeft = true;
-            setAction(animationActions[0]);
-        }
+    //     if (e.code === "KeyW" && !walkingLeft && objects['dragon'].rotation.y < 0) {
+    //         walkingLeft = true;
+    //         setAction(animationActions[0]);
+    //     }
 
-        if (e.code === "KeyD" && !walking) {
-            walking = true;
-            setAction(animationActions[1]);
-        }
+    //     if (e.code === "KeyD" && !walking) {
+    //         walking = true;
+    //         setAction(animationActions[1]);
+    //     }
 
-        if (e.code === "KeyA" && !walkingLeft) {
-            walkingLeft = true;
-            setAction(animationActions[1]);
-        }
-    });
+    //     if (e.code === "KeyA" && !walkingLeft) {
+    //         walkingLeft = true;
+    //         setAction(animationActions[1]);
+    //     }
+    // });
 
-    document.addEventListener('keyup', (e) => {
-        if (e.code === "KeyW" || e.code === "KeyD") {
-            walking = false;
-            walkingLeft = false;
-            setAction(animationActions[2]);
-        }
+    // document.addEventListener('keyup', (e) => {
+    //     return ;
+    //     if (e.code === "KeyW" || e.code === "KeyD") {
+    //         walking = false;
+    //         walkingLeft = false;
+    //         setAction(animationActions[2]);
+    //     }
 
-        if (e.code === 'KeyA') {
-            walking = false;
-            walkingLeft = false;
-            setAction(animationActions[2]);
-        }
-    });
+    //     if (e.code === 'KeyA') {
+    //         walking = false;
+    //         walkingLeft = false;
+    //         setAction(animationActions[2]);
+    //     }
+    // });
     // ----------------------
 
     // document.addEventListener('keydown', onKeyDown);
@@ -425,9 +426,6 @@ export function init() {
 // -----------------------
 // Loop de animação + física
 // -----------------------
-const MAX_SPEED = 25.5;      // m/s no plano XZ
-const ACCEL = 150.0;        // aceleração (impulso por segundo)
-
 function clampHorizontalVelocity(body, max) {
     const vx = body.velocity.x, vz = body.velocity.z;
     const speed = Math.hypot(vx, vz);
@@ -446,15 +444,15 @@ function pauseGame() {
 /**
  * Section of Animation
  */
-const speed = 20;
+const MAX_SPEED = 25.5;      // m/s no plano XZ
+const ACCEL = 300.0;        // aceleração (impulso por segundo)
+
 
 var nossaAnimacao = function (playerBody, world) {
-    let delta = clock.getDelta();
     if (gamePaused) return;
     console.log("entrou na animacao");
     // dt com limite para estabilidade
     const dt = Math.min(clock.getDelta(), 1 / 30);
-
     // Direções baseadas na câmera
     const forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
