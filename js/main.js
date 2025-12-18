@@ -94,7 +94,7 @@ var loadObj = function(){
             });
             scene.add(obj);
             objects["lobao"] = obj;
-            obj.position.x = 90;
+            obj.position.x = obj.position.z = 360;
             obj.scale.x = obj.scale.y = obj.scale.z = 30;            
         },
         function(progress){
@@ -121,7 +121,7 @@ var loadObj = function(){
         function(fbx) {
             fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
             fbx.position.x = -10;
-            fbx.position.y = -5;
+            fbx.position.y = 1;
             fbx.position.z = 0;
 
             scene.add(fbx);
@@ -137,25 +137,23 @@ var loadObj = function(){
             loadAnimation(objects["jeomar"], "murdered", "assets/Character/brutally-assassinated.fbx");
         },
         function(progress){
-            console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
         },
         function(error){
-            console.log("morto " + error);
+            // console.log("morto " + error);
         }
     );
 
     fbxLoader.load("assets/Villain/ninja-idle.fbx",
         function(fbx) {
-            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.1;
             fbx.position.x = -10;
-            fbx.position.y = -5;
+            fbx.position.y = 1;
             fbx.position.z = 0;
             scene.add(fbx);
 
             objects["students"] = createAnimatedState(fbx);
             objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
-
-            // objects["students"].actions.tocaia.setLoop(THREE.LoopOnce).clampWhenFinished = true;
 
             objects["students"].actions.tocaia.play();
             objects["students"].active = objects["students"].actions.tocaia;
@@ -163,10 +161,32 @@ var loadObj = function(){
             loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
         },
         function(progress){
-            console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
         },
         function(error){
-            console.log("morto " + error);
+            // console.log("morto " + error);
+        }
+    );
+
+    fbxLoader.load("assets/macarena-dance.fbx",
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.position.x = 340;
+            fbx.position.y = 0;
+            fbx.position.z = 340;
+            scene.add(fbx);
+
+            objects["macarena"] = createAnimatedState(fbx);
+            objects["macarena"].actions.dance = objects["macarena"].mixer.clipAction(fbx.animations[0]);
+
+            objects["macarena"].actions.dance.play();
+            objects["macarena"].active = objects["macarena"].actions.dance;
+        },
+        function(progress){
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+        },
+        function(error){
+            // console.log("morto " + error);
         }
     );
 }
@@ -236,18 +256,9 @@ function pauseGame() {
 const MAX_SPEED = 25.5;      // m/s no plano XZ
 const FORCE = 300.0;        // aceleração (impulso por segundo)
 
-var loadAnimation = function(state, name, url, options = {}) {
+var loadAnimation = function(state, name, url) {
     fbxLoader.load(url, function(fbx) {
         const action = state.mixer.clipAction(fbx.animations[0]);
-
-        // if (options.loop !== undefined) {
-        //     action.setLoop(options.loop);
-        // }
-
-        // if (options.clampWhenFinished) {
-        //     action.clampWhenFinished = true;
-        // }
-
         state.actions[name] = action;
     });
 }
