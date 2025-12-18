@@ -174,8 +174,8 @@ class Maze {
     // -----------------------
     // Marker visual
     // -----------------------
-    makeMarker(x, z, color, scene, size = 40) {
-        const geometry = new THREE.PlaneGeometry(size, size);
+    makeMarker(x, z, color, scene) {
+        const geometry = new THREE.PlaneGeometry(this.cellSize, this.cellSize);
         const material = new THREE.MeshStandardMaterial({
             color: color,
             side: THREE.DoubleSide
