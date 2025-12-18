@@ -31,7 +31,71 @@
 				}
 			}
 		</script>
-		<canvas id="minimap"></canvas>
+		<div id="menu-container">
+			<div id="main-menu" class="menu-screen">
+				<h1>Maze Escape</h1>
+				<div class="loading-status" id="loading-status">
+					<div class="loading-bar">
+						<div class="loading-progress" id="loading-progress"></div>
+					</div>
+					<p id="loading-text">Carregando recursos...</p>
+				</div>
+				
+				<div id="difficulty-selection" class="difficulty-menu" style="display: none;">
+					<h2>Selecione a Dificuldade</h2>
+					<div class="difficulty-buttons">
+						<button id="normal-mode" class="difficulty-btn">
+							<h3>Normal</h3>
+							<p>Para jogadores experientes</p>
+							<ul>
+								<li>Sem minimapa</li>
+								<li>Navegação por memória</li>
+								<li>Desafio completo</li>
+							</ul>
+						</button>
+						
+						<button id="baby-mode" class="difficulty-btn baby-mode">
+							<h3>For Babies 👶</h3>
+							<p>Modo fácil e relaxante</p>
+							<ul>
+								<li>Minimapa sempre visível</li>
+								<li>Exploração automática</li>
+								<li>Diversão garantida</li>
+							</ul>
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div id="win-overlay" class="hidden">
+			<div class="win-box">
+				<h1>🎉 Você venceu!</h1>
+				<p>Parabéns, você encontrou a saída do labirinto.</p>
+
+				<div class="win-buttons">
+					<button id="btn-restart">Reiniciar</button>
+					<button id="btn-menu">Menu</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="lose-screen" class="overlay hidden">
+			<div class="lose-card">
+				<h1>💀 Derrota 💀</h1>
+				<p id="lose-reason">Você se perdeu no labirinto</p>
+
+				<div class="lose-buttons">
+					<button id="retry-btn">Tentar novamente</button>
+					<button id="menu-btn">Menu principal</button>
+				</div>
+			</div>
+		</div>
+
+
+
+		<canvas id="minimap" style="display: none;"></canvas>
+
 
 		<script type="module">
 			import * as THREE from 'three';

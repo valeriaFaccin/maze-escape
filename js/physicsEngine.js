@@ -16,33 +16,47 @@ export class PhysicsEngine {
         this.world.allowSleep = allowSleep;
 
         this.materials = {
-        groundMaterial: new CANNON.Material('ground'),
-        wallMaterial:   new CANNON.Material('wall'),
-        playerMaterial: new CANNON.Material('player'),
+            groundMaterial: new CANNON.Material('ground'),
+            wallMaterial:   new CANNON.Material('wall'),
+            playerMaterial: new CANNON.Material('player'),
         };
 
         // Contact materials
         this.world.addContactMaterial(new CANNON.ContactMaterial(
         this.materials.groundMaterial, this.materials.playerMaterial,
-        { friction: 0.2, restitution: 0.0 }
+        { 
+            friction: 0.2, 
+            restitution: 0.0,
+            contactEquationStiffness: 1e8, 
+            contactEquationRelaxation: 10, 
+            frictionEquationStiffness: 1e8,
+            frictionEquationRelaxation: 10 
+        }
         ));
         this.world.addContactMaterial(new CANNON.ContactMaterial(
         this.materials.wallMaterial, this.materials.playerMaterial,
-        { friction: 0.0, restitution: 0.0 }
+        { 
+            friction: 0.0, 
+            restitution: 0.0,
+            contactEquationStiffness: 1e9,      // ← Ainda mais rígido para paredes
+            contactEquationRelaxation: 3,       // ← Menos relaxamento
+            frictionEquationStiffness: 1e8,
+            frictionEquationRelaxation: 3
+        }
         ));
 
         // Plano do chão
         const groundShape = new CANNON.Plane();
         this.groundBody = new CANNON.Body({
-        mass: 0,
-        shape: groundShape,
-        material: this.materials.groundMaterial,
+            mass: 0,
+            shape: groundShape,
+            material: this.materials.groundMaterial,
         });
         this.groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         this.world.addBody(this.groundBody);
     }
 
-    step(dt, timeStep = 1 / 60, maxSubSteps = 3) {
+    step(dt, timeStep = 1 / 60, maxSubSteps =5) {
         this.world.step(timeStep, dt, maxSubSteps);
     }
 
@@ -86,4 +100,13 @@ export class PhysicsEngine {
         // Se precisar limpar bodies e contatos
         this.world.bodies.forEach(b => this.world.removeBody(b));
     }
+
+    checkWin(playerX, playerZ, maze, cellSize) {
+        const col = Math.floor(playerX / cellSize);
+        const row = Math.floor(playerZ / cellSize);
+        console.log(`Player is at cell (row: ${row}, col: ${col}) - coord (${playerX.toFixed(2)}, ${playerZ.toFixed(2)})`);
+        const cell = maze.grid[row]?.[col];
+        return cell?.goal || false;
+    }
+
 }

@@ -9,13 +9,21 @@ import GameTimer from './GameTimer.js';
 
 var gameTimer = new GameTimer(10*60);
 
-let camera, scene, renderer, controls, playerBody, cameraYaw, cameraPitch;
+// Adicionar no início do main.js
+let gameState = {
+    isLoaded: false,
+    difficulty: null, // 'normal' ou 'baby'
+    gameStarted: false
+};
+
+let loadingProgress = 0;
+const totalLoadingSteps = 7
+
+let camera, scene, renderer, controls, playerBody;
 let gamePaused = false;
 let objects = [];
 
-// Configuração da câmera
-const CAMERA_MODE = 'first_person'; // 'first_person' ou 'third_person'
-const THIRD_PERSON_DISTANCE = 5;   // distância da câmera em 3ª pessoa
+let world, maze;
 
 const move = { forward: false, backward: false, left: false, right: false };
 let loadFinished = false;
@@ -26,7 +34,7 @@ let ambientLight, sunLight, dirLight, pointLight;
 
 var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
-const EYE_HEIGHT = 100;     // ~altura dos olhos
+const EYE_HEIGHT = 50;     // ~altura dos olhos
 
 // CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
 
@@ -47,6 +55,110 @@ var createAnimatedState = function(fbx) {
         active: null,
     }
 }
+
+// FUNCION MENU -----------------------------------------------------------------
+
+// Função para atualizar progresso de carregamento
+function updateLoadingProgress(step, message) {
+    loadingProgress = (step / totalLoadingSteps) * 100;
+    const progressBar = document.getElementById('loading-progress');
+    const loadingText = document.getElementById('loading-text');
+    
+    if (progressBar) progressBar.style.width = loadingProgress + '%';
+    if (loadingText) loadingText.textContent = message;
+    
+    if (loadingProgress >= 100) {
+        setTimeout(showDifficultySelection, 500);
+    }
+}
+
+// Mostrar seleção de dificuldade
+function showDifficultySelection() {
+    const loadingStatus = document.getElementById('loading-status');
+    const difficultySelection = document.getElementById('difficulty-selection');
+    
+    if (loadingStatus) loadingStatus.style.display = 'none';
+    if (difficultySelection) difficultySelection.style.display = 'block';
+    
+    gameState.isLoaded = true;
+}
+
+// Iniciar jogo com dificuldade selecionada
+function startGame(difficulty) {
+    gameState.difficulty = difficulty;
+    gameState.gameStarted = true;
+    
+    // Ocultar menu
+    const menuContainer = document.getElementById('menu-container');
+    if (menuContainer) menuContainer.style.display = 'none';
+    
+    // Configurar minimapa baseado na dificuldade
+    const minimap = document.getElementById('minimap');
+    if (difficulty === 'baby' && minimap) {
+        minimap.style.display = 'block';
+    }
+    
+    // Iniciar controles
+    if (controls) {
+        document.addEventListener('click', () => controls.lock());
+    }
+    
+    console.log(`Jogo iniciado no modo: ${difficulty}`);
+
+    renderer.setAnimationLoop( nossaAnimacao);
+
+}
+
+
+// Event listeners para os botões
+function setupMenuEventListeners() {
+    const normalBtn = document.getElementById('normal-mode');
+    const babyBtn = document.getElementById('baby-mode');
+    
+    if (normalBtn)  normalBtn.addEventListener('click', () => startGame('normal'));
+    if (babyBtn) babyBtn.addEventListener('click', () => startGame('baby'));
+}
+
+document.getElementById('btn-restart').onclick = () => {
+    location.reload();
+};
+
+document.getElementById('btn-menu').onclick = () => {
+    // Exemplo: voltar para menu inicial
+    location.reload();
+};
+
+document.getElementById('retry-btn')
+  .addEventListener('click', () => {
+    location.reload();
+  });
+
+document.getElementById('menu-btn')
+  .addEventListener('click', () => {
+    location.reload(); // depois pode trocar por showMenu()
+  });
+
+function showWinScreen() {
+    document.getElementById('win-overlay').classList.remove('hidden');
+
+    // Pausar jogo
+    gamePaused = true;
+
+    // Soltar mouse (PointerLock)
+    document.exitPointerLock();
+}
+
+function showLoseScreen(reason = 'Você perdeu') {
+  const screen = document.getElementById('lose-screen');
+  const text = document.getElementById('lose-reason');
+
+  text.textContent = reason;
+  screen.classList.remove('hidden');
+
+  document.exitPointerLock();
+}
+
+
 
 // PERSUE PLAYER ---------------------------------------------------------------------------------------------------------------------------
 
@@ -188,8 +300,12 @@ var loadObj = function(){
             });
             scene.add(obj);
             objects["lobao"] = obj;
-            obj.position.x = obj.position.z = 360;
-            obj.scale.x = obj.scale.y = obj.scale.z = 30;            
+            let positionX = (maze.columns - 1) * maze.cellSize;
+            let positionZ = (maze.rows - 1) * maze.cellSize;
+            obj.position.set(positionX, 0, positionZ);
+            obj.scale.x = obj.scale.y = obj.scale.z = 30;
+            console.log(`Lobao is at cell (row: ${(maze.rows - 1)}, col: ${(maze.columns - 1)}) - coord (${positionX.toFixed(2)}, ${positionZ.toFixed(2)})`);
+
         },
         function(progress){
             // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
@@ -200,15 +316,6 @@ var loadObj = function(){
     );
 
     // Crie nós de orientação
-    cameraYaw = new THREE.Object3D();   // gira em Y (esquerda/direita)
-    cameraPitch = new THREE.Object3D(); // gira em X (cima/baixo)
-    cameraYaw.add(cameraPitch);
-    cameraPitch.add(camera);
-
-    // Offset dos olhos (em relação ao centro do corpo físico/personagem)
-    camera.position.set(0, 0, 0);            // a câmera fica no pitch; o pitch será posicionado no olho
-    cameraPitch.position.set(0, EYE_HEIGHT, 0);
-    scene.add(cameraYaw);
 
     fbxLoader.load("assets/Character/avatar-idle.fbx",
         function(fbx) {
@@ -224,8 +331,6 @@ var loadObj = function(){
             objects["jeomar"].actions.idle.play();
             objects["jeomar"].active = objects["jeomar"].actions.idle;
 
-            fbx.add(cameraYaw); // o yaw/pitch ficam como filhos do personagem
-            cameraYaw.position.set(0, 0, 0);
 
             loadFinished = true;
 
@@ -289,27 +394,27 @@ var loadObj = function(){
 }
 
 // KEYBOARD EVENTS ----------------------------------------------------------------------------------------------------------------------------
-
-let mouseDX = 0, mouseDY = 0;
-let pitchLimit = THREE.MathUtils.degToRad(85);
-const yawSpeed = 0.002;   // sensibilidade horizontal
-const pitchSpeed = 0.002; // sensibilidade vertical
-
 const makeTheCharacterMove = () => {
     document.addEventListener('keydown', (e) => {
-        setAction(objects["jeomar"], "run");
         if (e.code === 'KeyW') move.forward = true;
         if (e.code === 'KeyS') move.backward = true;
         if (e.code === 'KeyA') move.left = true;
         if (e.code === 'KeyD') move.right = true;
+
+        if (move.forward || move.backward || move.left || move.right) {
+            setAction(objects["jeomar"], "run");
+        }
     });
 
     document.addEventListener('keyup', (e) => {
-        setAction(objects["jeomar"], "idle");
         if (e.code === 'KeyW') move.forward = false;
         if (e.code === 'KeyS') move.backward = false;
         if (e.code === 'KeyA') move.left = false;
         if (e.code === 'KeyD') move.right = false;
+
+        if (!move.forward && !move.backward && !move.left && !move.right) {
+            setAction(objects["jeomar"], "idle");
+        }
     });
 
     window.addEventListener('click', () => {
@@ -319,12 +424,7 @@ const makeTheCharacterMove = () => {
     });
 
     document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
-    document.addEventListener('mousemove', (e) => {
-        if (controls.isLocked) {
-            mouseDX = e.movementX || 0;
-            mouseDY = e.movementY || 0;
-        }
-    });
+
 
     window.addEventListener('blur', () => pauseGame());
 }
@@ -340,12 +440,6 @@ function setupPointerLockPause() {
     });
 }
 
-function applyLookRotation() {
-    cameraYaw.rotation.y -= mouseDX * yawSpeed;
-    cameraPitch.rotation.x -= mouseDY * pitchSpeed;
-    cameraPitch.rotation.x = THREE.MathUtils.clamp(cameraPitch.rotation.x, -pitchLimit, pitchLimit);
-    mouseDX = mouseDY = 0;
-}
 
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
 
@@ -365,8 +459,8 @@ function pauseGame() {
     gameTimer.pause();
     if (controls.isLocked) controls.unlock();
 }
-const MAX_SPEED = 35.5;      // m/s no plano XZ
-const FORCE = 600.0;        // aceleração (impulso por segundo)
+const MAX_SPEED = 50.0;      // m/s no plano XZ
+const FORCE = 175.5;        // aceleração (impulso por segundo)
 
 var loadAnimation = function(state, name, url) {
     fbxLoader.load(url, function(fbx) {
@@ -388,15 +482,18 @@ var setAction = function(state, name) {
 }
 
 function getForwardVector() {
-    // Extrai direção “para frente” do rig (ignora componente Y para manter no plano)
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraYaw.quaternion);
-    forward.y = 0; forward.normalize();
+    // Usar direção da câmera diretamente
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0; 
+    forward.normalize();
     return forward;
 }
 
 function getRightVector() {
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraYaw.quaternion);
-    right.y = 0; right.normalize();
+    const forward = getForwardVector();
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+    right.normalize();
     return right;
 }
 
@@ -432,23 +529,24 @@ function movePlayer(dt) {
     }
 }
 
-var nossaAnimacao = function (world, maze) {
-    // dt com limite para estabilidade
-    const dt = Math.min(clock.getDelta(), 1 / 30);
-    // Direções baseadas na câmera
+var nossaAnimacao = function () {
+    // console.log("gamePaused", gamePaused);
+    // console.log("loadFinished", loadFinished);
+    if (gamePaused) return;
+    if (!loadFinished) return;
 
-    // Atualiza mixers
+    let delta = clock.getDelta();
+
     for (const key in objects) {
         const obj = objects[key];
         if (obj.mixer) {
-            obj.mixer.update(dt);
+            obj.mixer.update(delta);
         }
     }
-
-    if (gamePaused || !loadFinished) {
-        renderer.render(scene, camera);
-        return;
-    }
+    // console.log("entrou na animacao");
+    // dt com limite para estabilidade
+    const dt = Math.min(delta, 1 / 30);
+    // Direções baseadas na câmera
 
     gameTimer.update(dt);
     const timerEl = document.getElementById('timer');
@@ -475,8 +573,6 @@ var nossaAnimacao = function (world, maze) {
         // console.log("move", move);
         if (moveVec.lengthSq() > 0) {
             moveVec.normalize();
-
-
             // garanta que não está dormindo ao aplicar input
             playerBody.wakeUp();
             // console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
@@ -484,24 +580,34 @@ var nossaAnimacao = function (world, maze) {
             // aceleração acumulada em velocidade no plano XZ
             playerBody.velocity.x += moveVec.x * FORCE * dt;
             playerBody.velocity.z += moveVec.z * FORCE * dt;
+
+            // const targetRotation = Math.atan2(moveVec.x, moveVec.z);
+            // objects["jeomar"].fbx.rotation.y = THREE.MathUtils.lerp(
+            //     objects["jeomar"].fbx.rotation.y, 
+            //     targetRotation, 
+            //     dt * 8  // Velocidade de rotação
+            // );
+    
             // // console.log(playerBody.velocity.x);
             // console.log(playerBody.velocity.z);
         } 
 
         clampHorizontalVelocity(playerBody, MAX_SPEED);
     }
-    applyLookRotation();       // do mouse → yaw/pitch
-    movePlayer(dt);            // forças/velocidade
+    // movePlayer(dt);            // forças/velocidade
 
     // Step da física (fixo) com substep relativo ao dt
-    world.step(1 / 60, dt, 3);
+    physicsEngine.step(dt);
 
     syncVisualFromPhysics();
     updateStudentEncounters(dt, maze);
     // Câmera segue o corpo
     let x = playerBody.position.x;
     let z = playerBody.position.z;
-    
+    if(physicsEngine.checkWin(x, z, maze, maze.cellSize)){ 
+        console.log("ganhou na pos", x, z);
+        showWinScreen();
+    }
     maze.drawMinimap(x, z);
     renderer.render(scene, camera);
 };
@@ -567,7 +673,8 @@ function gameOver() {
 
     setAction(objects["jeomar"], "murdered");
     pauseGame();
-    setTimeout(restartGame, 5000);
+    showLoseScreen("O tempo acabou!");
+    // setTimeout(restartGame, 5000);
 }
 
 function restartGame() {
@@ -634,13 +741,13 @@ const createGround = () => {
 // INIT ---------------------------------------------------------------------------------------------------------------------------------------
 
 const CAPSULE_HEIGHT = 1.7;
+var physicsEngine;
 
 export function init() {
+    setupMenuEventListeners();
+    updateLoadingProgress(1, "Inicializando Three.js...");
+    
     document.getElementById('timer').innerText = gameTimer.getFormatted();
-
-    const physicsEngine = new PhysicsEngine();
-    let world = physicsEngine.world;
-    let physics = physicsEngine.materials;
 
     camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
 
@@ -653,13 +760,25 @@ export function init() {
     renderer.shadowMap.enabled = true;
 
     document.body.appendChild(renderer.domElement);
+    updateLoadingProgress(2, "Carregando física...");
+    physicsEngine = new PhysicsEngine();
+    world = physicsEngine.world;
+    let physics = physicsEngine.materials;
+
     controls = new PointerLockControls(camera, renderer.domElement);
     setupPointerLockPause();
+    
+    camera.position.set(0, EYE_HEIGHT, 0);
+    
+    updateLoadingProgress(3, "Gerando labirinto...");
 
-    const maze = new Maze(20, 10, 10);
+    maze = new Maze(20, 10, 10);
     maze.setup();
     maze.generateMaze();
     maze.buildMaze(scene, world, physics);
+
+    updateLoadingProgress(4, "Carregando personagem...");
+
      // Câmera será posicionada pelo rig de câmera
 
     // Materiais previamente criados (conforme falamos antes)
@@ -683,47 +802,43 @@ export function init() {
     createDirectionalLight();
     createPointLight();
     loadObj();
+    updateLoadingProgress(5, "Carregando chão...");
     createGround();
+    updateLoadingProgress(6, "Configurando movimento...");
     makeTheCharacterMove();
 
+    updateLoadingProgress(7, "Finalizando");
     gameTimer.onTimeUp = gameOver;
 
-    const animationLoop = () => nossaAnimacao( world, maze);
-
-    renderer.setAnimationLoop( animationLoop );
 
     document.body.appendChild( renderer.domElement );
     renderer.render( scene, camera );
     scene.fog = new THREE.Fog(0xcccccc, 10, 500);
 
-    scene.fog = new THREE.Fog(0x0b1324, 20, 300);
     window.addEventListener( 'resize', onWindowResize );
 }
 
 // Sincroniza visual com física, mas mantém câmera independente
 function syncVisualFromPhysics() {
-  // posiciona o “root” do personagem no centro do corpo
-  objects["jeomar"].fbx.position.set(
-    playerBody.position.x,
-    playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés
-    playerBody.position.z
-  );
-
-  // Câmera independente da física - não é afetada pela gravidade
-  const targetCameraHeight = playerBody.position.y - CAPSULE_HEIGHT/2 + EYE_HEIGHT;
-  
-  if (CAMERA_MODE === 'first_person') {
-    // 1ª pessoa: câmera na posição dos olhos
-    cameraYaw.position.set(0, targetCameraHeight,0);
-  } else if (CAMERA_MODE === 'third_person') {
-    // 3ª pessoa: câmera atrás do jogador
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(cameraYaw.quaternion);
-    cameraYaw.position.set(
-      playerBody.position.x - forward.x * THIRD_PERSON_DISTANCE,
-      targetCameraHeight + 1, // um pouco mais alta em 3ª pessoa
-      playerBody.position.z - forward.z * THIRD_PERSON_DISTANCE
+      // Posicionar o personagem
+      objects["jeomar"].fbx.position.set(
+        playerBody.position.x,
+        playerBody.position.y - CAPSULE_HEIGHT/2,
+        playerBody.position.z
     );
-  }
+
+    // Posicionar a câmera na altura dos olhos
+    camera.position.set(
+        playerBody.position.x,
+        playerBody.position.y - CAPSULE_HEIGHT/2 + EYE_HEIGHT,
+        playerBody.position.z
+    );
+
+    // Rotacionar personagem baseado na direção da câmera (opcional)
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    const targetRotation = Math.atan2(forward.x, forward.z);
+    objects["jeomar"].fbx.rotation.y = targetRotation;
 }
 
 function onWindowResize() {

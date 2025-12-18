@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 
 let current;
-let goal;
 
+const CELLSIZE = 50;
 class Maze {
     constructor(size, rows, columns) {
         this.size = size;
@@ -14,6 +14,7 @@ class Maze {
         this.rows = rows;
         this.grid = [];
         this.stack = [];
+        this.cellSize = CELLSIZE
     }
 
   // Set the grid: Create new this.grid array based on number of instance rows and columns
@@ -30,6 +31,7 @@ class Maze {
         // Set the starting grid
         current = this.grid[0][0];
         this.grid[this.rows - 1][this.columns - 1].goal = true;
+        this.grid[this.rows - 1][this.columns - 1].walls.bottomWall = false;
     }
 
   // Draw the canvas by setting the size and placing thke cells in the grid array on the canvas.
@@ -58,7 +60,7 @@ class Maze {
     // Construir labirinto
     // -----------------------
     buildMaze(scene, world, physics) {
-        const cellSize = 50;      // tamanho de cada célula no espaço 3D
+        const cellSize = this.cellSize;      // tamanho de cada célula no espaço 3D
         const wallHeight = 60;
         const wallThickness = 3;
 
@@ -173,8 +175,8 @@ class Maze {
     // -----------------------
     // Marker visual
     // -----------------------
-    makeMarker(x, z, color, scene, size = 40) {
-        const geometry = new THREE.PlaneGeometry(size, size);
+    makeMarker(x, z, color, scene) {
+        const geometry = new THREE.PlaneGeometry(this.cellSize, this.cellSize);
         const material = new THREE.MeshStandardMaterial({
             color: color,
             side: THREE.DoubleSide
@@ -200,7 +202,12 @@ class Maze {
         const cellW = w / cols;
         const cellH = h / rows;
 
+        this.markCellAsExplored(xPlayer, zPlayer);
+
         ctx.clearRect(0, 0, w, h);
+         // Fundo escuro para áreas não exploradas
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, w, h);
 
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
@@ -212,43 +219,63 @@ class Maze {
                 const x = c * cellW;
                 const y = r * cellH;
 
-                if (cell.walls.topWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, y);
-                    ctx.lineTo(x + cellW, y);
-                    ctx.stroke();
+                // Só desenhar se a célula foi explorada
+                if (cell.explored) {
+                    // Fundo da célula explorada
+                    ctx.fillStyle = '#2a2a2a';
+                    ctx.fillRect(x, y, cellW, cellH);
+
+                    // Desenhar paredes apenas para células exploradas
+                    ctx.strokeStyle = 'white';
+                    
+                    if (cell.walls.topWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x + cellW, y);
+                        ctx.stroke();
+                    }
+
+                    if (cell.walls.rightWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x + cellW, y);
+                        ctx.lineTo(x + cellW, y + cellH);
+                        ctx.stroke();
+                    }
+
+                    if (cell.walls.bottomWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y + cellH);
+                        ctx.lineTo(x + cellW, y + cellH);
+                        ctx.stroke();
+                    }
+
+                    if (cell.walls.leftWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x, y + cellH);
+                        ctx.stroke();
+                    }
+
+                    // Desenhar objetivo se explorado
+                    if (cell.goal) {
+                        ctx.fillStyle = 'red';
+                        ctx.fillRect(
+                            x + cellW * 0.25,
+                            y + cellH * 0.25,
+                            cellW * 0.5,
+                            cellH * 0.5
+                        );
+                    }
+                }  else {
+                    // Área não explorada - mostrar como névoa
+                    ctx.fillStyle = '#0a0a0a';
+                    ctx.fillRect(x, y, cellW, cellH);
+                    
+                    // Opcional: adicionar padrão de névoa
+                    ctx.fillStyle = '#151515';
+                    ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
                 }
 
-                if (cell.walls.rightWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x + cellW, y);
-                    ctx.lineTo(x + cellW, y + cellH);
-                    ctx.stroke();
-                }
-
-                if (cell.walls.bottomWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, y + cellH);
-                    ctx.lineTo(x + cellW, y + cellH);
-                    ctx.stroke();
-                }
-
-                if (cell.walls.leftWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, y);
-                    ctx.lineTo(x, y + cellH);
-                    ctx.stroke();
-                }
-
-                if (cell.goal) {
-                    ctx.fillStyle = 'red';
-                    ctx.fillRect(
-                        x + cellW * 0.25,
-                        y + cellH * 0.25,
-                        cellW * 0.5,
-                        cellH * 0.5
-                    );
-                }
             }
         }
 
@@ -259,16 +286,52 @@ class Maze {
         const canvas = document.getElementById('minimap');
 
         ctx.fillStyle = 'lime';
+        const cellX = Math.floor(px / this.cellSize);
+        const cellZ = Math.floor(pz / this.cellSize);
 
+        // centro da célula
+        const centerX = (cellX + 0.5) * this.cellSize;
+        const centerZ = (cellZ + 0.5) * this.cellSize;
         ctx.beginPath();
         ctx.arc(
-            (px / (this.columns * 50)) * canvas.width,
-            (pz / (this.rows * 50)) * canvas.height,
-            8,
+            (centerX / (this.columns * this.cellSize)) * canvas.width,
+            (centerZ / (this.rows * this.cellSize)) * canvas.height,
+            7,
             0,
             Math.PI * 2
         );
         ctx.fill();
+    }
+
+    // Adicionar este método na classe Maze
+    markCellAsExplored(worldX, worldZ, explorationRadius = 0) {        
+        // Converter coordenadas do mundo para coordenadas da grid
+        const col = Math.floor(worldX / this.cellSize);
+        const row = Math.floor(worldZ / this.cellSize);
+        if (!(row >= 0 && row < this.rows && col >= 0 && col < this.columns)) return ;
+
+        const cell = this.grid[row][col];
+        cell.explored = true;
+
+        // Cima
+        if (!cell.walls.topWall && row > 0) {
+            this.grid[row - 1][col].explored = true;
+        }
+
+        // Baixo
+        if (!cell.walls.bottomWall && row < this.rows - 1) {
+            this.grid[row + 1][col].explored = true;
+        }
+
+        // Esquerda
+        if (!cell.walls.leftWall && col > 0) {
+            this.grid[row][col - 1].explored = true;
+        }
+
+        // Direita
+        if (!cell.walls.rightWall && col < this.columns - 1) {
+            this.grid[row][col + 1].explored = true;
+        }
     }
 }
 
@@ -278,6 +341,7 @@ class Cell {
         this.rowNum = rowNum;
         this.colNum = colNum;
         this.visited = false;
+        this.explored = false;
         this.walls = {
         topWall: true,
         rightWall: true,
