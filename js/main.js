@@ -159,17 +159,16 @@ function showLoseScreen(reason = 'Você perdeu') {
   document.exitPointerLock();
 }
 
-
-
 // PERSUE PLAYER ---------------------------------------------------------------------------------------------------------------------------
 
 let nextStudentCheck = 0;
 let lastHitTime = 0;
 const HIT_COOLDOWN = 2.5;
 
-function updateStudentEncounters(dt, maze) {
-    // if (!gameTimer.isRunning()) return;
+function updateStudentEncounters() {
+    if (!gameState.gameStarted) return;
     if (!objects["students"] || !objects["students"].fbx) return;
+
     const now = clock.elapsedTime;
     if (now < nextStudentCheck) return;
 
@@ -349,7 +348,7 @@ var loadObj = function(){
 
     fbxLoader.load("assets/Villain/ninja-idle.fbx",
         function(fbx) {
-            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.1;
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.15;
             fbx.position.x = 300;
             fbx.position.y = 1;
             fbx.position.z = 0;
@@ -513,17 +512,15 @@ var nossaAnimacao = function () {
 
     let delta = clock.getDelta();
 
-    // Sempre atualizar animações (mesmo durante morte)
+    // Atualiza mixers
     for (const key in objects) {
         const obj = objects[key];
         if (obj.mixer) {
             obj.mixer.update(delta);
         }
     }
-    // console.log("entrou na animacao");
     // dt com limite para estabilidade
     const dt = Math.min(delta, 1 / 30);
-    // Direções baseadas na câmera
 
     gameTimer.update(dt);
     const timerEl = document.getElementById('timer');
@@ -578,11 +575,12 @@ var nossaAnimacao = function () {
     if (!isPlayerDying) {
         physicsEngine.step(dt);
         syncVisualFromPhysics();
-        updateStudentEncounters(dt, maze);
+        updateStudentEncounters();
     } else {
         // Durante morte, só sincronizar posição visual (sem física)
         syncVisualFromPhysics();
     }
+
     // Câmera segue o corpo
     let x = playerBody.position.x;
     let z = playerBody.position.z;
@@ -824,7 +822,8 @@ export function init() {
 
     document.body.appendChild( renderer.domElement );
     renderer.render( scene, camera );
-    scene.fog = new THREE.Fog(0xcccccc, 10, 500);
+
+    scene.fog = new THREE.Fog(0x0b1324, 20, 300);
 
     window.addEventListener( 'resize', onWindowResize );
 }
