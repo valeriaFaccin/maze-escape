@@ -270,13 +270,15 @@ var createDirectionalLight = function () {
     scene.add(dirLight);
 };
 
+var secondPointLight;
+
 var createPointLight = function() {
     pointLight = new THREE.PointLight(0x3aff7a, 5, 120);
     pointLight.position.set(0, 20, 0);
     pointLight.castShadow = true;
 
-    let secondPointLight = new THREE.PointLight(0x00ff00, 5, 120);
-    secondPointLight.position.set(350, 7, 350);
+    secondPointLight = new THREE.PointLight(0x00ff00, 50, 0);
+    secondPointLight.position.set(350, 15, 340);
     secondPointLight.castShadow = true;
     secondPointLight.visible = true;
     scene.add(secondPointLight);
@@ -721,6 +723,7 @@ export function init() {
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x101a2e);
+    scene.fog = new THREE.Fog(0x0b1324, 1, 300);
     scene.environment = new THREE.Color(0x1a233a);
 
     renderer = new THREE.WebGLRenderer({ antialias: true } );
@@ -781,8 +784,6 @@ export function init() {
 
     document.body.appendChild( renderer.domElement );
     renderer.render( scene, camera );
-
-    scene.fog = new THREE.Fog(0x0b1324, 20, 300);
 
     window.addEventListener( 'resize', onWindowResize );
 }
