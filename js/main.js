@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import {Maze} from './maze.js'
+import { Maze } from './maze.js'
 import { PhysicsEngine } from './physicsEngine.js';
 import * as CANNON from 'cannon-es';
 
@@ -14,15 +14,10 @@ let objects = [];
 const CAMERA_MODE = 'first_person'; // 'first_person' ou 'third_person'
 const THIRD_PERSON_DISTANCE = 5;   // distância da câmera em 3ª pessoa
 
-let character;
-const actions = {};
-let activeAction;
-
 const move = { forward: false, backward: false, left: false, right: false };
+let loadFinished = false;
 
-var mixer;
 var clock = new THREE.Clock();
-var loadFinished = false;
 
 let ambientLight, sunLight, dirLight, pointLight;
 
@@ -30,14 +25,25 @@ var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
 const EYE_HEIGHT = 100;     // ~altura dos olhos
 
+// CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
+
+var createAnimatedState = function(fbx) {
+    return {
+        fbx,
+        mixer: new THREE.AnimationMixer(fbx),
+        actions: {},
+        active: null,
+    }
+}
+
 // LIGHT --------------------------------------------------------------------------------------------------------------------------------------
 
-var criaIluminacao = function(){
+var criaIluminacao = function() {
     luzAmbiente();
     luzSolar();
 }
 
-var luzSolar = function(){
+var luzSolar = function() {
     sunLight = new THREE.DirectionalLight(0xffffff, 1);
     sunLight.castShadow = true;
     sunLight.position.y = 900;
@@ -55,7 +61,7 @@ var luzSolar = function(){
     scene.add(sunLight);
 }
 
-var luzAmbiente = function(){
+var luzAmbiente = function() {
     ambientLight = new THREE.AmbientLight(0x2b3a55, 0.25);
     ambientLight.visible = true;
 
@@ -93,7 +99,7 @@ var loadObj = function(){
             });
             scene.add(obj);
             objects["lobao"] = obj;
-            obj.position.x = 90;
+            obj.position.x = obj.position.z = 360;
             obj.scale.x = obj.scale.y = obj.scale.z = 30;            
         },
         function(progress){
@@ -104,7 +110,7 @@ var loadObj = function(){
         }
     );
 
-        // Crie nós de orientação
+    // Crie nós de orientação
     cameraYaw = new THREE.Object3D();   // gira em Y (esquerda/direita)
     cameraPitch = new THREE.Object3D(); // gira em X (cima/baixo)
     cameraYaw.add(cameraPitch);
@@ -113,65 +119,104 @@ var loadObj = function(){
     // Offset dos olhos (em relação ao centro do corpo físico/personagem)
     camera.position.set(0, 0, 0);            // a câmera fica no pitch; o pitch será posicionado no olho
     cameraPitch.position.set(0, EYE_HEIGHT, 0);
+    scene.add(cameraYaw);
 
     fbxLoader.load("assets/Character/avatar-idle.fbx",
-        function(obj) {
-            character = obj;
-            character.scale.x = character.scale.y = character.scale.z = 0.2;
-            character.position.x = -10;
-            character.position.y = 1;
-            character.position.z = 0;
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.position.x = -10;
+            fbx.position.y = 1;
+            fbx.position.z = 0;
 
-            scene.add(character);
-            mixer = new THREE.AnimationMixer(character);
+            scene.add(fbx);
 
-            actions.idle = mixer.clipAction(obj.animations[0]);
-            actions.idle.play();
+            objects["jeomar"] = createAnimatedState(fbx);
+            objects["jeomar"].actions.idle = objects["jeomar"].mixer.clipAction(fbx.animations[0]);
+            objects["jeomar"].actions.idle.play();
+            objects["jeomar"].active = objects["jeomar"].actions.idle;
             loadFinished = true;
 
-   
-            // Acopla o rig de câmera ao personagem (na cabeça)
-            character.add(cameraYaw); // o yaw/pitch ficam como filhos do personagem
-            cameraYaw.position.set(0, 0, 0);
-
-            activeAction = actions.idle;
-            loadRunningAnimation();
+            loadAnimation(objects["jeomar"], "run", "assets/Character/avatar-running.fbx");
+            loadAnimation(objects["jeomar"], "hit", "assets/Character/got-hit.fbx");
+            loadAnimation(objects["jeomar"], "murdered", "assets/Character/brutally-assassinated.fbx");
         },
         function(progress){
-            console.log("vivo! "+(progress.loaded/progress.total)*100 + "%");
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
         },
         function(error){
-            console.log("morto " + error);
+            // console.log("morto " + error);
+        }
+    );
+
+    fbxLoader.load("assets/Villain/ninja-idle.fbx",
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.1;
+            fbx.position.x = -10;
+            fbx.position.y = 1;
+            fbx.position.z = 0;
+            scene.add(fbx);
+
+            objects["students"] = createAnimatedState(fbx);
+            objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
+
+            objects["students"].actions.tocaia.play();
+            objects["students"].active = objects["students"].actions.tocaia;
+
+            loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
+        },
+        function(progress){
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+        },
+        function(error){
+            // console.log("morto " + error);
+        }
+    );
+
+    fbxLoader.load("assets/macarena-dance.fbx",
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.position.x = 340;
+            fbx.position.y = 0;
+            fbx.position.z = 340;
+            scene.add(fbx);
+
+            objects["macarena"] = createAnimatedState(fbx);
+            objects["macarena"].actions.dance = objects["macarena"].mixer.clipAction(fbx.animations[0]);
+
+            objects["macarena"].actions.dance.play();
+            objects["macarena"].active = objects["macarena"].actions.dance;
+        },
+        function(progress){
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+        },
+        function(error){
+            // console.log("morto " + error);
         }
     );
 }
 
 // KEYBOARD EVENTS ----------------------------------------------------------------------------------------------------------------------------
+
 let mouseDX = 0, mouseDY = 0;
 let pitchLimit = THREE.MathUtils.degToRad(85);
 const yawSpeed = 0.002;   // sensibilidade horizontal
 const pitchSpeed = 0.002; // sensibilidade vertical
 
 const makeTheCharacterMove = () => {
-    document.addEventListener('keyup', (e) => {
-        setAction("run");
-
-        if (e.code === 'KeyW') move.forward = false;
-        if (e.code === 'KeyS') move.backward = false;
-        if (e.code === 'KeyA') move.left = false;
-        if (e.code === 'KeyD') move.right = false;
-    });
-
-
     document.addEventListener('keydown', (e) => {
-        loadFinished = true;
-        setAction("idle");
-
+        setAction(objects["jeomar"], "run");
         if (e.code === 'KeyW') move.forward = true;
         if (e.code === 'KeyS') move.backward = true;
         if (e.code === 'KeyA') move.left = true;
         if (e.code === 'KeyD') move.right = true;
-        if (e.code === 'Escape') pauseGame();
+    });
+
+    document.addEventListener('keyup', (e) => {
+        setAction(objects["jeomar"], "idle");
+        if (e.code === 'KeyW') move.forward = false;
+        if (e.code === 'KeyS') move.backward = false;
+        if (e.code === 'KeyA') move.left = false;
+        if (e.code === 'KeyD') move.right = false;
     });
 
     window.addEventListener('click', () => controls.lock());
@@ -197,18 +242,16 @@ function applyLookRotation() {
 
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
 
-// -----------------------
 // Loop de animação + física
-// -----------------------
-function clampHorizontalVelocity(body, max) {
-    const vx = body.velocity.x, vz = body.velocity.z;
-    const speed = Math.hypot(vx, vz);
-    if (speed > max) {
-        const s = max / speed;
-        body.velocity.x *= s;
-        body.velocity.z *= s;
-    }
-}
+// function clampHorizontalVelocity(body, max) {
+//     const vx = body.velocity.x, vz = body.velocity.z;
+//     const speed = Math.hypot(vx, vz);
+//     if (speed > max) {
+//         const s = max / speed;
+//         body.velocity.x *= s;
+//         body.velocity.z *= s;
+//     }
+// }
 
 function pauseGame() {
     gamePaused = true;
@@ -217,29 +260,24 @@ function pauseGame() {
 const MAX_SPEED = 25.5;      // m/s no plano XZ
 const FORCE = 300.0;        // aceleração (impulso por segundo)
 
-function loadRunningAnimation() {
-    fbxLoader.load("assets/Character/avatar-running.fbx", 
-        function(obj) {
-            const runClip = obj.animations[0];
-            actions.run = mixer.clipAction(runClip);
-        }
-    );
+var loadAnimation = function(state, name, url) {
+    fbxLoader.load(url, function(fbx) {
+        const action = state.mixer.clipAction(fbx.animations[0]);
+        state.actions[name] = action;
+    });
 }
 
-function setAction(name) {
-    const newAction = actions[name];
-    if (!newAction || newAction === activeAction) return;
+var setAction = function(state, name) {
+    const newAction = state.actions[name];
+    if (!newAction || newAction === state.active) return;
 
-    activeAction.fadeOut(0.2);
+    if (state.active) {
+        state.active.fadeOut(0.2);
+    }
 
-    newAction
-        .reset()
-        .fadeIn(0.2)
-        .play();
-
-    activeAction = newAction;
+    newAction.reset().fadeIn(0.2).play();
+    state.active = newAction;
 }
-
 
 function getForwardVector() {
     // Extrai direção “para frente” do rig (ignora componente Y para manter no plano)
@@ -247,6 +285,7 @@ function getForwardVector() {
     forward.y = 0; forward.normalize();
     return forward;
 }
+
 function getRightVector() {
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraYaw.quaternion);
     right.y = 0; right.normalize();
@@ -288,11 +327,19 @@ function movePlayer(dt) {
 var nossaAnimacao = function (world, maze) {
 
     if (gamePaused) return;
-    if(!loadFinished) return;
+    if (!loadFinished) return;
 
+    let delta = clock.getDelta();
+
+    for (const key in objects) {
+        const obj = objects[key];
+        if (obj.mixer) {
+            obj.mixer.update(delta);
+        }
+    }
     console.log("entrou na animacao");
     // dt com limite para estabilidade
-    const dt = Math.min(clock.getDelta(), 1 / 30);
+    const dt = Math.min(delta, 1 / 30);
     // Direções baseadas na câmera
 
     const forward = new THREE.Vector3();
@@ -304,30 +351,30 @@ var nossaAnimacao = function (world, maze) {
     // Movimento (aplica velocidade ao corpo físico, não move diretamente a câmera)
 
     console.log("controls.isLocked", controls.isLocked);
-    if (controls.isLocked) {
-        const moveVec = new THREE.Vector3();
-        if (move.forward)  moveVec.add(forward);
-        if (move.backward) moveVec.addScaledVector(forward, -1);
-        if (move.left)     moveVec.addScaledVector(right, -1);
-        if (move.right)    moveVec.add(right);
-        console.log("move", move);
-        if (moveVec.lengthSq() > 0) {
-            moveVec.normalize();
+    // if (controls.isLocked) {
+    //     const moveVec = new THREE.Vector3();
+    //     if (move.forward)  moveVec.add(forward);
+    //     if (move.backward) moveVec.addScaledVector(forward, -1);
+    //     if (move.left)     moveVec.addScaledVector(right, -1);
+    //     if (move.right)    moveVec.add(right);
+    //     console.log("move", move);
+    //     if (moveVec.lengthSq() > 0) {
+    //         moveVec.normalize();
 
 
-            // garanta que não está dormindo ao aplicar input
-            playerBody.wakeUp();
-            console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
+    //         // garanta que não está dormindo ao aplicar input
+    //         playerBody.wakeUp();
+    //         console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
 
-            // aceleração acumulada em velocidade no plano XZ
-            playerBody.velocity.x += moveVec.x * FORCE * dt;
-            playerBody.velocity.z += moveVec.z * FORCE * dt;
-            console.log(playerBody.velocity.x);
-            console.log(playerBody.velocity.z);
-        } 
+    //         // aceleração acumulada em velocidade no plano XZ
+    //         playerBody.velocity.x += moveVec.x * FORCE * dt;
+    //         playerBody.velocity.z += moveVec.z * FORCE * dt;
+    //         console.log(playerBody.velocity.x);
+    //         console.log(playerBody.velocity.z);
+    //     } 
 
-        clampHorizontalVelocity(playerBody, MAX_SPEED);
-    }
+    //     clampHorizontalVelocity(playerBody, MAX_SPEED);
+    // }
     applyLookRotation();       // do mouse → yaw/pitch
     movePlayer(dt);            // forças/velocidade
 
@@ -385,7 +432,6 @@ function createCapsuleBody({
     return body;
 }
 
-
 // GROUND -------------------------------------------------------------------------------------------------------------------------------------
 
 const createGround = () => {
@@ -407,7 +453,7 @@ const createGround = () => {
 
     textures.forEach(tex => {
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(200, 200);
+        tex.repeat.set(50, 50);
         tex.anisotropy = 50;
     });
 
@@ -438,7 +484,8 @@ const createGround = () => {
 
 
 // INIT ---------------------------------------------------------------------------------------------------------------------------------------
-    const CAPSULE_HEIGHT = 1.7;
+
+const CAPSULE_HEIGHT = 1.7;
 
 export function init() {
     const physicsEngine = new PhysicsEngine();
@@ -482,7 +529,6 @@ export function init() {
     });
     world.addBody(playerBody);
 
-
     criaIluminacao();
     createDirectionalLight();
     createPointLight();
@@ -498,14 +544,13 @@ export function init() {
     scene.fog = new THREE.Fog(0xcccccc, 10, 500);
 
     scene.fog = new THREE.Fog(0x0b1324, 20, 300);
-    character.visible = false
     window.addEventListener( 'resize', onWindowResize );
 }
 
 // Sincroniza visual com física, mas mantém câmera independente
 function syncVisualFromPhysics() {
-  // Posiciona o "root" do personagem no centro do corpo
-  character.position.set(
+  // posiciona o “root” do personagem no centro do corpo
+  objects["jeomar"].fbx.position.set(
     playerBody.position.x,
     playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés
     playerBody.position.z
@@ -527,7 +572,6 @@ function syncVisualFromPhysics() {
     );
   }
 }
-
 
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
