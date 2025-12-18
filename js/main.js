@@ -34,7 +34,7 @@ let ambientLight, sunLight, dirLight, pointLight;
 
 var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
-const EYE_HEIGHT = 50;     // ~altura dos olhos
+const EYE_HEIGHT = 45;     // ~altura dos olhos
 
 // CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
 
@@ -393,6 +393,8 @@ var loadObj = function(){
     );
 }
 
+let animationWalking = true;
+
 // KEYBOARD EVENTS ----------------------------------------------------------------------------------------------------------------------------
 const makeTheCharacterMove = () => {
     document.addEventListener('keydown', (e) => {
@@ -401,7 +403,7 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyA') move.left = true;
         if (e.code === 'KeyD') move.right = true;
 
-        if (move.forward || move.backward || move.left || move.right) {
+        if ((move.forward || move.backward || move.left || move.right) && animationWalking) {
             setAction(objects["jeomar"], "run");
         }
     });
@@ -412,7 +414,7 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyA') move.left = false;
         if (e.code === 'KeyD') move.right = false;
 
-        if (!move.forward && !move.backward && !move.left && !move.right) {
+        if (!move.forward && !move.backward && !move.left && !move.right && animationWalking) {
             setAction(objects["jeomar"], "idle");
         }
     });
@@ -460,7 +462,7 @@ function pauseGame() {
     if (controls.isLocked) controls.unlock();
 }
 const MAX_SPEED = 50.0;      // m/s no plano XZ
-const FORCE = 175.5;        // aceleração (impulso por segundo)
+const FORCE = 255.5;        // aceleração (impulso por segundo)
 
 var loadAnimation = function(state, name, url) {
     fbxLoader.load(url, function(fbx) {
@@ -584,13 +586,15 @@ function onPlayerHitByStudent() {
     if (!loadFinished) return;
 
     gameTimer.reduce(30);
+    animationWalking = false;
     setAction(objects["students"], "murder");
     setAction(objects["jeomar"], "hit");
 
     setTimeout(() => {
         setAction(objects["students"], "tocaia");
         setAction(objects["jeomar"], "idle");
-    }, 1200);
+        animationWalking = true;        
+    }, 1500);
 }
 
 function createCapsuleBody({
@@ -740,7 +744,7 @@ export function init() {
     
     updateLoadingProgress(3, "Gerando labirinto...");
 
-    maze = new Maze(20, 10, 10);
+    maze = new Maze(20, 15, 10);
     maze.setup();
     maze.generateMaze();
     maze.buildMaze(scene, world, physics);
