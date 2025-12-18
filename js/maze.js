@@ -58,8 +58,8 @@ class Maze {
     // Construir labirinto
     // -----------------------
     buildMaze(scene, world, physics) {
-        const cellSize = 40;      // tamanho de cada célula no espaço 3D
-        const wallHeight = cellSize;
+        const cellSize = 50;      // tamanho de cada célula no espaço 3D
+        const wallHeight = 60;
         const wallThickness = 3;
 
         for (let r = 0; r < this.rows; r++) {
@@ -186,6 +186,90 @@ class Maze {
         scene.add(marker);
     }
 
+    drawMinimap(xPlayer, zPlayer) {
+        const canvas = document.getElementById('minimap');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const rows = this.rows;
+        const cols = this.columns;
+
+        const w = canvas.width;
+        const h = canvas.height;
+
+        const cellW = w / cols;
+        const cellH = h / rows;
+
+        ctx.clearRect(0, 0, w, h);
+
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const cell = this.grid[r][c];
+
+                const x = c * cellW;
+                const y = r * cellH;
+
+                if (cell.walls.topWall) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + cellW, y);
+                    ctx.stroke();
+                }
+
+                if (cell.walls.rightWall) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + cellW, y);
+                    ctx.lineTo(x + cellW, y + cellH);
+                    ctx.stroke();
+                }
+
+                if (cell.walls.bottomWall) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y + cellH);
+                    ctx.lineTo(x + cellW, y + cellH);
+                    ctx.stroke();
+                }
+
+                if (cell.walls.leftWall) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x, y + cellH);
+                    ctx.stroke();
+                }
+
+                if (cell.goal) {
+                    ctx.fillStyle = 'red';
+                    ctx.fillRect(
+                        x + cellW * 0.25,
+                        y + cellH * 0.25,
+                        cellW * 0.5,
+                        cellH * 0.5
+                    );
+                }
+            }
+        }
+
+        this.drawPlayer(xPlayer, zPlayer, ctx);
+    }
+
+    drawPlayer(px, pz, ctx) {
+        const canvas = document.getElementById('minimap');
+
+        ctx.fillStyle = 'lime';
+
+        ctx.beginPath();
+        ctx.arc(
+            (px / (this.columns * 50)) * canvas.width,
+            (pz / (this.rows * 50)) * canvas.height,
+            8,
+            0,
+            Math.PI * 2
+        );
+        ctx.fill();
+    }
 }
 
 class Cell {

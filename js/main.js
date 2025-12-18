@@ -10,6 +10,10 @@ let camera, scene, renderer, controls, playerBody, cameraYaw, cameraPitch;
 let gamePaused = false;
 let objects = [];
 
+// Configuração da câmera
+const CAMERA_MODE = 'first_person'; // 'first_person' ou 'third_person'
+const THIRD_PERSON_DISTANCE = 5;   // distância da câmera em 3ª pessoa
+
 let character;
 const actions = {};
 let activeAction;
@@ -24,6 +28,7 @@ let ambientLight, sunLight, dirLight, pointLight;
 
 var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
+const EYE_HEIGHT = 100;     // ~altura dos olhos
 
 // LIGHT --------------------------------------------------------------------------------------------------------------------------------------
 
@@ -106,7 +111,6 @@ var loadObj = function(){
     cameraPitch.add(camera);
 
     // Offset dos olhos (em relação ao centro do corpo físico/personagem)
-    const EYE_HEIGHT = 1.6;     // ~altura dos olhos
     camera.position.set(0, 0, 0);            // a câmera fica no pitch; o pitch será posicionado no olho
     cameraPitch.position.set(0, EYE_HEIGHT, 0);
 
@@ -281,7 +285,7 @@ function movePlayer(dt) {
     }
 }
 
-var nossaAnimacao = function (playerBody, world) {
+var nossaAnimacao = function (world, maze) {
 
     if (gamePaused) return;
     if(!loadFinished) return;
@@ -332,7 +336,10 @@ var nossaAnimacao = function (playerBody, world) {
 
     syncVisualFromPhysics();
     // Câmera segue o corpo
- 
+    let x = playerBody.position.x;
+    let z = playerBody.position.z;
+    
+    maze.drawMinimap(x, z);
     renderer.render(scene, camera);
 };
 
@@ -456,16 +463,14 @@ export function init() {
     maze.setup();
     maze.generateMaze();
     maze.buildMaze(scene, world, physics);
-
-     // Câmera: olhar para centro
-    camera.lookAt(new THREE.Vector3(maze.columns * 5, 1, maze.rows * 5));
+     // Câmera será posicionada pelo rig de câmera
 
     // Materiais previamente criados (conforme falamos antes)
     const playerMaterial = physics.playerMaterial;
 
     // Alturas
     const CAPSULE_RADIUS = 0.35;
-    const START = new CANNON.Vec3(5, CAPSULE_HEIGHT/2 + 0.05, 5);
+    const START = new CANNON.Vec3(0, CAPSULE_HEIGHT + 1, 0);  // Início do labirinto (célula 0,0)
   
     // Corpo físico
     playerBody = createCapsuleBody({
@@ -485,7 +490,7 @@ export function init() {
     createGround();
     makeTheCharacterMove();
 
-    const animationLoop = () => nossaAnimacao(playerBody, world);
+    const animationLoop = () => nossaAnimacao( world, maze);
     renderer.setAnimationLoop( animationLoop );
 
     document.body.appendChild( renderer.domElement );
@@ -497,17 +502,30 @@ export function init() {
     window.addEventListener( 'resize', onWindowResize );
 }
 
-// O rig segue o corpo (personagem e câmera juntos)
+// Sincroniza visual com física, mas mantém câmera independente
 function syncVisualFromPhysics() {
-  // posiciona o “root” do personagem no centro do corpo
+  // Posiciona o "root" do personagem no centro do corpo
   character.position.set(
     playerBody.position.x,
-    playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés (ajuste conforme pivô do FBX)
+    playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés
     playerBody.position.z
   );
 
-  // Também posiciona o rig (yaw/pitch) no centro do corpo
-  cameraYaw.position.set(playerBody.position.x, playerBody.position.y + 2, playerBody.position.z);
+  // Câmera independente da física - não é afetada pela gravidade
+  const targetCameraHeight = playerBody.position.y - CAPSULE_HEIGHT/2 + EYE_HEIGHT;
+  
+  if (CAMERA_MODE === 'first_person') {
+    // 1ª pessoa: câmera na posição dos olhos
+    cameraYaw.position.set(0, targetCameraHeight,0);
+  } else if (CAMERA_MODE === 'third_person') {
+    // 3ª pessoa: câmera atrás do jogador
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(cameraYaw.quaternion);
+    cameraYaw.position.set(
+      playerBody.position.x - forward.x * THIRD_PERSON_DISTANCE,
+      targetCameraHeight + 1, // um pouco mais alta em 3ª pessoa
+      playerBody.position.z - forward.z * THIRD_PERSON_DISTANCE
+    );
+  }
 }
 
 
