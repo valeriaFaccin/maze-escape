@@ -104,7 +104,7 @@ export class PhysicsEngine {
     checkWin(playerX, playerZ, maze, cellSize) {
         const col = Math.floor(playerX / cellSize);
         const row = Math.floor(playerZ / cellSize);
-
+        console.log(`Player is at cell (row: ${row}, col: ${col}) - coord (${playerX.toFixed(2)}, ${playerZ.toFixed(2)})`);
         const cell = maze.grid[row]?.[col];
         return cell?.goal || false;
     }

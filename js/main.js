@@ -300,10 +300,12 @@ var loadObj = function(){
             });
             scene.add(obj);
             objects["lobao"] = obj;
-            let positionX = maze.columns * maze.cellSize - 20;
-            let positionZ = maze.rows * maze.cellSize - 20;
+            let positionX = (maze.columns - 1) * maze.cellSize;
+            let positionZ = (maze.rows - 1) * maze.cellSize;
             obj.position.set(positionX, 0, positionZ);
             obj.scale.x = obj.scale.y = obj.scale.z = 30;
+            console.log(`Lobao is at cell (row: ${(maze.rows - 1)}, col: ${(maze.columns - 1)}) - coord (${positionX.toFixed(2)}, ${positionZ.toFixed(2)})`);
+
         },
         function(progress){
             // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
@@ -528,8 +530,8 @@ function movePlayer(dt) {
 }
 
 var nossaAnimacao = function () {
-    console.log("gamePaused", gamePaused);
-    console.log("loadFinished", loadFinished);
+    // console.log("gamePaused", gamePaused);
+    // console.log("loadFinished", loadFinished);
     if (gamePaused) return;
     if (!loadFinished) return;
 
@@ -541,7 +543,7 @@ var nossaAnimacao = function () {
             obj.mixer.update(delta);
         }
     }
-    console.log("entrou na animacao");
+    // console.log("entrou na animacao");
     // dt com limite para estabilidade
     const dt = Math.min(delta, 1 / 30);
     // Direções baseadas na câmera
@@ -602,7 +604,10 @@ var nossaAnimacao = function () {
     // Câmera segue o corpo
     let x = playerBody.position.x;
     let z = playerBody.position.z;
-    if(physicsEngine.checkWin(x, z, maze, maze.cellSize)) showWinScreen();
+    if(physicsEngine.checkWin(x, z, maze, maze.cellSize)){ 
+        console.log("ganhou na pos", x, z);
+        showWinScreen();
+    }
     maze.drawMinimap(x, z);
     renderer.render(scene, camera);
 };
