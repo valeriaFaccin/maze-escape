@@ -30,6 +30,15 @@ const EYE_HEIGHT = 100;     // ~altura dos olhos
 
 // CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
 
+const PlayerState = {
+    IDLE: 'idle',
+    RUNNING: 'running',
+    HIT: 'hit',
+    DEAD: 'dead'
+};
+
+let playerState = PlayerState.IDLE;
+
 var createAnimatedState = function(fbx) {
     return {
         fbx,
@@ -151,9 +160,16 @@ var createDirectionalLight = function () {
 };
 
 var createPointLight = function() {
-    pointLight = new THREE.PointLight(0x3aff7a, 0.15, 60);
-    pointLight.position.set(0, 10, 0);
+    pointLight = new THREE.PointLight(0x3aff7a, 5, 120);
+    pointLight.position.set(0, 20, 0);
     pointLight.castShadow = true;
+
+    let secondPointLight = new THREE.PointLight(0x00ff00, 5, 120);
+    secondPointLight.position.set(350, 7, 350);
+    secondPointLight.castShadow = true;
+    secondPointLight.visible = true;
+    scene.add(secondPointLight);
+    console.log(secondPointLight);
 
     pointLight.visible = true;
     scene.add(pointLight);
