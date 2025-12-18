@@ -30,12 +30,91 @@ const EYE_HEIGHT = 100;     // ~altura dos olhos
 
 // CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
 
+const PlayerState = {
+    IDLE: 'idle',
+    RUNNING: 'running',
+    HIT: 'hit',
+    DEAD: 'dead'
+};
+
+let playerState = PlayerState.IDLE;
+
 var createAnimatedState = function(fbx) {
     return {
         fbx,
         mixer: new THREE.AnimationMixer(fbx),
         actions: {},
         active: null,
+    }
+}
+
+// PERSUE PLAYER ---------------------------------------------------------------------------------------------------------------------------
+
+let nextStudentCheck = 0;
+let lastHitTime = 0;
+const HIT_COOLDOWN = 2.5;
+
+function updateStudentEncounters(dt, maze) {
+    // if (!gameTimer.isRunning()) return;
+    if (!objects["students"] || !objects["students"].fbx) return;
+    const now = clock.elapsedTime;
+    if (now < nextStudentCheck) return;
+
+    const remainingRatio = gameTimer.getRemaining() / (10*60);
+
+    // Intervalo de aparições diminui enquanto o tempo vai acabando 
+    const minInterval = 1.0;
+    const maxInterval = 5.0;
+
+    const interval = THREE.MathUtils.lerp(minInterval, maxInterval, remainingRatio);
+
+    nextStudentCheck = now + interval;
+
+    maybeTeleportStudent(remainingRatio);
+    checkStudentHit();
+}
+
+function maybeTeleportStudent(remainingRatio) {
+    if (!objects["students"] || !objects["students"].fbx) return;
+    if (objects["students"].active !== objects["students"].actions.tocaia) return;
+
+    const playerPos = playerBody.position;
+    const student = objects["students"].fbx;
+
+    // Aumenta probabilidade com menor tempo restante
+    const spawnChance = THREE.MathUtils.lerp(0.2, 0.8, 1 - remainingRatio);
+    if (Math.random() > spawnChance) return;
+
+    const maxRadius = THREE.MathUtils.lerp(80, 20, 1 - remainingRatio);
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.random() * maxRadius;
+
+    const x = playerPos.x + Math.cos(angle) * radius;
+    const z = playerPos.z + Math.sin(angle) * radius;
+    student.position.set(x, 1, z);
+}
+
+function checkStudentHit() {
+    if (!loadFinished) return;
+    if (!objects["students"] || !objects["students"].fbx) return;
+
+    const now = clock.elapsedTime;
+    if (now - lastHitTime < HIT_COOLDOWN) return;
+
+    const playerPos = playerBody.position;
+    const studentPos = objects["students"].fbx.position;
+
+    console.log("playerPos", playerPos)
+    console.log("studentPos", studentPos);
+
+    const dx = playerBody.position.x - studentPos.x;
+    const dz = playerBody.position.z - studentPos.z;
+    const dist = Math.hypot(dx, dz);
+    console.log(dist);
+
+    if (dist < 10) {
+        lastHitTime = now;
+        onPlayerHitByStudent();
     }
 }
 
@@ -81,9 +160,16 @@ var createDirectionalLight = function () {
 };
 
 var createPointLight = function() {
-    pointLight = new THREE.PointLight(0x3aff7a, 0.15, 60);
-    pointLight.position.set(0, 10, 0);
+    pointLight = new THREE.PointLight(0x3aff7a, 5, 120);
+    pointLight.position.set(0, 20, 0);
     pointLight.castShadow = true;
+
+    let secondPointLight = new THREE.PointLight(0x00ff00, 5, 120);
+    secondPointLight.position.set(350, 7, 350);
+    secondPointLight.castShadow = true;
+    secondPointLight.visible = true;
+    scene.add(secondPointLight);
+    console.log(secondPointLight);
 
     pointLight.visible = true;
     scene.add(pointLight);
@@ -158,7 +244,7 @@ var loadObj = function(){
     fbxLoader.load("assets/Villain/ninja-idle.fbx",
         function(fbx) {
             fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.1;
-            fbx.position.x = -10;
+            fbx.position.x = 300;
             fbx.position.y = 1;
             fbx.position.z = 0;
             scene.add(fbx);
@@ -172,10 +258,10 @@ var loadObj = function(){
             loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
         },
         function(progress){
-            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+            console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
         },
         function(error){
-            // console.log("morto " + error);
+            console.log("morto " + error);
         }
     );
 
@@ -379,27 +465,27 @@ var nossaAnimacao = function (world, maze) {
 
     // Movimento (aplica velocidade ao corpo físico, não move diretamente a câmera)
 
-    console.log("controls.isLocked", controls.isLocked);
+    // console.log("controls.isLocked", controls.isLocked);
     if (controls.isLocked) {
         const moveVec = new THREE.Vector3();
         if (move.forward)  moveVec.add(forward);
         if (move.backward) moveVec.addScaledVector(forward, -1);
         if (move.left)     moveVec.addScaledVector(right, -1);
         if (move.right)    moveVec.add(right);
-        console.log("move", move);
+        // console.log("move", move);
         if (moveVec.lengthSq() > 0) {
             moveVec.normalize();
 
 
             // garanta que não está dormindo ao aplicar input
             playerBody.wakeUp();
-            console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
+            // console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
 
             // aceleração acumulada em velocidade no plano XZ
             playerBody.velocity.x += moveVec.x * FORCE * dt;
             playerBody.velocity.z += moveVec.z * FORCE * dt;
-            console.log(playerBody.velocity.x);
-            console.log(playerBody.velocity.z);
+            // // console.log(playerBody.velocity.x);
+            // console.log(playerBody.velocity.z);
         } 
 
         clampHorizontalVelocity(playerBody, MAX_SPEED);
@@ -411,6 +497,7 @@ var nossaAnimacao = function (world, maze) {
     world.step(1 / 60, dt, 3);
 
     syncVisualFromPhysics();
+    updateStudentEncounters(dt, maze);
     // Câmera segue o corpo
     let x = playerBody.position.x;
     let z = playerBody.position.z;
@@ -422,14 +509,14 @@ var nossaAnimacao = function (world, maze) {
 function onPlayerHitByStudent() {
     if (!loadFinished) return;
 
-    gameTimer.reduce(60);
+    gameTimer.reduce(30);
     setAction(objects["students"], "murder");
     setAction(objects["jeomar"], "hit");
 
     setTimeout(() => {
         setAction(objects["students"], "tocaia");
         setAction(objects["jeomar"], "idle");
-    }, 800);
+    }, 1200);
 }
 
 function createCapsuleBody({
