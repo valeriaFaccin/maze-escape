@@ -347,21 +347,8 @@ function movePlayer(dt) {
 }
 
 var nossaAnimacao = function (world, maze) {
-
-    if (gamePaused) return;
-    if (!loadFinished) return;
-
-    let delta = clock.getDelta();
-
-    for (const key in objects) {
-        const obj = objects[key];
-        if (obj.mixer) {
-            obj.mixer.update(delta);
-        }
-    }
-    console.log("entrou na animacao");
     // dt com limite para estabilidade
-    const dt = Math.min(delta, 1 / 30);
+    const dt = Math.min(clock.getDelta(), 1 / 30);
     // Direções baseadas na câmera
 
     // Atualiza mixers
@@ -541,7 +528,7 @@ const createGround = () => {
         roughness: 1
     });
 
-    const geometry = new THREE.PlaneGeometry(500, 500, 256, 256);
+    const geometry = new THREE.PlaneGeometry(5000, 5000, 256, 256);
 
     geometry.setAttribute(
         'uv2',
