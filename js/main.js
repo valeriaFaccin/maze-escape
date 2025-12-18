@@ -7,7 +7,7 @@ import { PhysicsEngine } from './physicsEngine.js';
 import * as CANNON from 'cannon-es';
 import GameTimer from './GameTimer.js';
 
-var gameTimer = new GameTimer(10*60);
+var gameTimer = new GameTimer(1*30);
 
 // Adicionar no início do main.js
 let gameState = {
@@ -21,6 +21,7 @@ const totalLoadingSteps = 7
 
 let camera, scene, renderer, controls, playerBody;
 let gamePaused = false;
+let isPlayerDying = false;  // Novo estado para animação de morte
 let objects = [];
 
 let world, maze;
@@ -354,13 +355,13 @@ var loadObj = function(){
             fbx.position.z = 0;
             scene.add(fbx);
 
-            objects["students"] = createAnimatedState(fbx);
-            objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
+            // objects["students"] = createAnimatedState(fbx);
+            // objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
 
-            objects["students"].actions.tocaia.play();
-            objects["students"].active = objects["students"].actions.tocaia;
+            // objects["students"].actions.tocaia.play();
+            // objects["students"].active = objects["students"].actions.tocaia;
 
-            loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
+            // loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
         },
         function(progress){
             console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
@@ -404,7 +405,7 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyD') move.right = true;
 
         if ((move.forward || move.backward || move.left || move.right) && animationWalking) {
-            setAction(objects["jeomar"], "run");
+            // setAction(objects["jeomar"], "murdered");
         }
     });
 
@@ -415,7 +416,7 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyD') move.right = false;
 
         if (!move.forward && !move.backward && !move.left && !move.right && animationWalking) {
-            setAction(objects["jeomar"], "idle");
+            // setAction(objects["jeomar"], "murdered");
         }
     });
 
@@ -457,9 +458,12 @@ function clampHorizontalVelocity(body, max) {
 }
 
 function pauseGame() {
-    gamePaused = true;
-    gameTimer.pause();
-    if (controls.isLocked) controls.unlock();
+    // Só pausar se não estiver na animação de morte
+    if (!isPlayerDying) {
+        gamePaused = true;
+        gameTimer.pause();
+        if (controls.isLocked) controls.unlock();
+    }
 }
 const MAX_SPEED = 50.0;      // m/s no plano XZ
 const FORCE = 255.5;        // aceleração (impulso por segundo)
@@ -502,11 +506,14 @@ function getRightVector() {
 var nossaAnimacao = function () {
     // console.log("gamePaused", gamePaused);
     // console.log("loadFinished", loadFinished);
-    if (gamePaused) return;
+    
+    // Se o jogo está pausado E não está na animação de morte, parar
+    if (gamePaused && !isPlayerDying) return;
     if (!loadFinished) return;
 
     let delta = clock.getDelta();
 
+    // Sempre atualizar animações (mesmo durante morte)
     for (const key in objects) {
         const obj = objects[key];
         if (obj.mixer) {
@@ -532,9 +539,9 @@ var nossaAnimacao = function () {
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
     // Movimento (aplica velocidade ao corpo físico, não move diretamente a câmera)
-
+    // Só permitir movimento se não estiver morrendo
     // console.log("controls.isLocked", controls.isLocked);
-    if (controls.isLocked) {
+    if (controls.isLocked && !isPlayerDying) {
         const moveVec = new THREE.Vector3();
         if (move.forward)  moveVec.add(forward);
         if (move.backward) moveVec.addScaledVector(forward, -1);
@@ -567,18 +574,30 @@ var nossaAnimacao = function () {
     // movePlayer(dt);            // forças/velocidade
 
     // Step da física (fixo) com substep relativo ao dt
-    physicsEngine.step(dt);
-
-    syncVisualFromPhysics();
-    updateStudentEncounters(dt, maze);
+    // Só atualizar física se não estiver morrendo
+    if (!isPlayerDying) {
+        physicsEngine.step(dt);
+        syncVisualFromPhysics();
+        updateStudentEncounters(dt, maze);
+    } else {
+        // Durante morte, só sincronizar posição visual (sem física)
+        syncVisualFromPhysics();
+    }
     // Câmera segue o corpo
     let x = playerBody.position.x;
     let z = playerBody.position.z;
-    if(physicsEngine.checkWin(x, z, maze, maze.cellSize)){ 
+    
+    // Só verificar vitória se não estiver morrendo
+    if (!isPlayerDying && physicsEngine.checkWin(x, z, maze, maze.cellSize)){ 
         console.log("ganhou na pos", x, z);
         showWinScreen();
     }
-    maze.drawMinimap(x, z);
+    
+    // Só desenhar minimapa se não estiver morrendo
+    if (!isPlayerDying) {
+        maze.drawMinimap(x, z);
+    }
+    
     renderer.render(scene, camera);
 };
 
@@ -643,10 +662,30 @@ function createCapsuleBody({
 function gameOver() {
     if (!loadFinished) return;
 
+    // Ativar estado de morte (permite animações mas impede movimento)
+    isPlayerDying = true;
+    animationWalking = false;
+    
+    // Tocar a animação de morte
     setAction(objects["jeomar"], "murdered");
-    pauseGame();
-    showLoseScreen("O tempo acabou!");
-    // setTimeout(restartGame, 5000);
+    
+    // Pausar timer
+    gameTimer.pause();
+    
+    // Soltar o mouse para o jogador não conseguir olhar ao redor
+    if (controls.isLocked) {
+        controls.unlock();
+    }
+    
+    console.log("animacao de morte iniciada");
+    
+    // Aguardar a animação terminar antes de mostrar a tela de derrota
+    setTimeout(() => {
+        console.log("mostrar tela de derrota");
+        gamePaused = true;  // Pausar completamente apenas após a animação
+        isPlayerDying = false;  // Resetar estado de morte
+        showLoseScreen("O tempo acabou!");
+    }, 3500);  // 3.5 segundos para a animação
 }
 
 function restartGame() {
