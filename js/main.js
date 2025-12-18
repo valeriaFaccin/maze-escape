@@ -7,12 +7,23 @@ import { PhysicsEngine } from './physicsEngine.js';
 import * as CANNON from 'cannon-es';
 import GameTimer from './GameTimer.js';
 
-var gameTimer = new GameTimer(10*60);
+var gameTimer = new GameTimer(1*60);
+
+// Adicionar no início do main.js
+let gameState = {
+    isLoaded: false,
+    difficulty: null, // 'normal' ou 'baby'
+    gameStarted: false
+};
+
+let loadingProgress = 0;
+const totalLoadingSteps = 7
 
 let camera, scene, renderer, controls, playerBody, cameraYaw, cameraPitch;
 let gamePaused = false;
 let objects = [];
 
+let world, maze;
 // Configuração da câmera
 const CAMERA_MODE = 'first_person'; // 'first_person' ou 'third_person'
 const THIRD_PERSON_DISTANCE = 5;   // distância da câmera em 3ª pessoa
@@ -38,6 +49,110 @@ var createAnimatedState = function(fbx) {
         active: null,
     }
 }
+
+// FUNCION MENU -----------------------------------------------------------------
+
+// Função para atualizar progresso de carregamento
+function updateLoadingProgress(step, message) {
+    loadingProgress = (step / totalLoadingSteps) * 100;
+    const progressBar = document.getElementById('loading-progress');
+    const loadingText = document.getElementById('loading-text');
+    
+    if (progressBar) progressBar.style.width = loadingProgress + '%';
+    if (loadingText) loadingText.textContent = message;
+    
+    if (loadingProgress >= 100) {
+        setTimeout(showDifficultySelection, 500);
+    }
+}
+
+// Mostrar seleção de dificuldade
+function showDifficultySelection() {
+    const loadingStatus = document.getElementById('loading-status');
+    const difficultySelection = document.getElementById('difficulty-selection');
+    
+    if (loadingStatus) loadingStatus.style.display = 'none';
+    if (difficultySelection) difficultySelection.style.display = 'block';
+    
+    gameState.isLoaded = true;
+}
+
+// Iniciar jogo com dificuldade selecionada
+function startGame(difficulty) {
+    gameState.difficulty = difficulty;
+    gameState.gameStarted = true;
+    
+    // Ocultar menu
+    const menuContainer = document.getElementById('menu-container');
+    if (menuContainer) menuContainer.style.display = 'none';
+    
+    // Configurar minimapa baseado na dificuldade
+    const minimap = document.getElementById('minimap');
+    if (difficulty === 'baby' && minimap) {
+        minimap.style.display = 'block';
+    }
+    
+    // Iniciar controles
+    if (controls) {
+        document.addEventListener('click', () => controls.lock());
+    }
+    
+    console.log(`Jogo iniciado no modo: ${difficulty}`);
+
+    renderer.setAnimationLoop( nossaAnimacao);
+
+}
+
+
+// Event listeners para os botões
+function setupMenuEventListeners() {
+    const normalBtn = document.getElementById('normal-mode');
+    const babyBtn = document.getElementById('baby-mode');
+    
+    if (normalBtn)  normalBtn.addEventListener('click', () => startGame('normal'));
+    if (babyBtn) babyBtn.addEventListener('click', () => startGame('baby'));
+}
+
+document.getElementById('btn-restart').onclick = () => {
+    location.reload();
+};
+
+document.getElementById('btn-menu').onclick = () => {
+    // Exemplo: voltar para menu inicial
+    location.reload();
+};
+
+document.getElementById('retry-btn')
+  .addEventListener('click', () => {
+    location.reload();
+  });
+
+document.getElementById('menu-btn')
+  .addEventListener('click', () => {
+    location.reload(); // depois pode trocar por showMenu()
+  });
+
+function showWinScreen() {
+    document.getElementById('win-overlay').classList.remove('hidden');
+
+    // Pausar jogo
+    gamePaused = true;
+
+    // Soltar mouse (PointerLock)
+    document.exitPointerLock();
+}
+
+function showLoseScreen(reason = 'Você perdeu') {
+  const screen = document.getElementById('lose-screen');
+  const text = document.getElementById('lose-reason');
+
+  text.textContent = reason;
+  screen.classList.remove('hidden');
+
+  document.exitPointerLock();
+}
+
+
 
 // LIGHT --------------------------------------------------------------------------------------------------------------------------------------
 
@@ -279,8 +394,8 @@ function pauseGame() {
     gameTimer.pause();
     if (controls.isLocked) controls.unlock();
 }
-const MAX_SPEED = 35.5;      // m/s no plano XZ
-const FORCE = 600.0;        // aceleração (impulso por segundo)
+const MAX_SPEED = 50.0;      // m/s no plano XZ
+const FORCE = 250.5;        // aceleração (impulso por segundo)
 
 var loadAnimation = function(state, name, url) {
     fbxLoader.load(url, function(fbx) {
@@ -346,7 +461,7 @@ function movePlayer(dt) {
     }
 }
 
-var nossaAnimacao = function (world, maze) {
+var nossaAnimacao = function () {
 
     if (gamePaused) return;
     if (!loadFinished) return;
@@ -363,14 +478,6 @@ var nossaAnimacao = function (world, maze) {
     // dt com limite para estabilidade
     const dt = Math.min(delta, 1 / 30);
     // Direções baseadas na câmera
-
-    // Atualiza mixers
-    for (const key in objects) {
-        const obj = objects[key];
-        if (obj.mixer) {
-            obj.mixer.update(dt);
-        }
-    }
 
     if (gamePaused || !loadFinished) {
         renderer.render(scene, camera);
@@ -427,7 +534,7 @@ var nossaAnimacao = function (world, maze) {
     // Câmera segue o corpo
     let x = playerBody.position.x;
     let z = playerBody.position.z;
-    
+    if(physicsEngine.checkWin(x, z, maze, maze.cellSize)) showWinScreen();
     maze.drawMinimap(x, z);
     renderer.render(scene, camera);
 };
@@ -493,7 +600,8 @@ function gameOver() {
 
     setAction(objects["jeomar"], "murdered");
     pauseGame();
-    setTimeout(restartGame, 5000);
+    showLoseScreen("O tempo acabou!");
+    // setTimeout(restartGame, 5000);
 }
 
 function restartGame() {
@@ -560,13 +668,13 @@ const createGround = () => {
 // INIT ---------------------------------------------------------------------------------------------------------------------------------------
 
 const CAPSULE_HEIGHT = 1.7;
+var physicsEngine;
 
 export function init() {
+    setupMenuEventListeners();
+    updateLoadingProgress(1, "Inicializando Three.js...");
+    
     document.getElementById('timer').innerText = gameTimer.getFormatted();
-
-    const physicsEngine = new PhysicsEngine();
-    let world = physicsEngine.world;
-    let physics = physicsEngine.materials;
 
     camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
 
@@ -579,13 +687,22 @@ export function init() {
     renderer.shadowMap.enabled = true;
 
     document.body.appendChild(renderer.domElement);
+    updateLoadingProgress(2, "Carregando física...");
+    physicsEngine = new PhysicsEngine();
+    world = physicsEngine.world;
+    let physics = physicsEngine.materials;
+
     controls = new PointerLockControls(camera, renderer.domElement);
     setupPointerLockPause();
+    updateLoadingProgress(3, "Gerando labirinto...");
 
-    const maze = new Maze(20, 10, 10);
+    maze = new Maze(20, 10, 10);
     maze.setup();
     maze.generateMaze();
     maze.buildMaze(scene, world, physics);
+
+    updateLoadingProgress(4, "Carregando personagem...");
+
      // Câmera será posicionada pelo rig de câmera
 
     // Materiais previamente criados (conforme falamos antes)
@@ -609,47 +726,46 @@ export function init() {
     createDirectionalLight();
     createPointLight();
     loadObj();
+    updateLoadingProgress(5, "Carregando chão...");
     createGround();
+    updateLoadingProgress(6, "Configurando movimento...");
     makeTheCharacterMove();
 
+    updateLoadingProgress(7, "Finalizando");
     gameTimer.onTimeUp = gameOver;
 
-    const animationLoop = () => nossaAnimacao( world, maze);
-
-    renderer.setAnimationLoop( animationLoop );
 
     document.body.appendChild( renderer.domElement );
     renderer.render( scene, camera );
     scene.fog = new THREE.Fog(0xcccccc, 10, 500);
 
-    scene.fog = new THREE.Fog(0x0b1324, 20, 300);
     window.addEventListener( 'resize', onWindowResize );
 }
 
 // Sincroniza visual com física, mas mantém câmera independente
 function syncVisualFromPhysics() {
-  // posiciona o “root” do personagem no centro do corpo
-  objects["jeomar"].fbx.position.set(
-    playerBody.position.x,
-    playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés
-    playerBody.position.z
-  );
-
-  // Câmera independente da física - não é afetada pela gravidade
-  const targetCameraHeight = playerBody.position.y - CAPSULE_HEIGHT/2 + EYE_HEIGHT;
-  
-  if (CAMERA_MODE === 'first_person') {
-    // 1ª pessoa: câmera na posição dos olhos
-    cameraYaw.position.set(0, targetCameraHeight,0);
-  } else if (CAMERA_MODE === 'third_person') {
-    // 3ª pessoa: câmera atrás do jogador
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(cameraYaw.quaternion);
-    cameraYaw.position.set(
-      playerBody.position.x - forward.x * THIRD_PERSON_DISTANCE,
-      targetCameraHeight + 1, // um pouco mais alta em 3ª pessoa
-      playerBody.position.z - forward.z * THIRD_PERSON_DISTANCE
+    // posiciona o “root” do personagem no centro do corpo
+    objects["jeomar"].fbx.position.set(
+        playerBody.position.x,
+        playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés
+        playerBody.position.z
     );
-  }
+
+    // Câmera independente da física - não é afetada pela gravidade
+    const targetCameraHeight = playerBody.position.y - CAPSULE_HEIGHT/2 + EYE_HEIGHT;
+    
+    if (CAMERA_MODE === 'first_person') {
+        // 1ª pessoa: câmera na posição dos olhos
+        cameraYaw.position.set(0, targetCameraHeight,0);
+    } else if (CAMERA_MODE === 'third_person') {
+        // 3ª pessoa: câmera atrás do jogador
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(cameraYaw.quaternion);
+        cameraYaw.position.set(
+            playerBody.position.x - forward.x * THIRD_PERSON_DISTANCE,
+            targetCameraHeight + 1, // um pouco mais alta em 3ª pessoa
+            playerBody.position.z - forward.z * THIRD_PERSON_DISTANCE
+        );
+    }
 }
 
 function onWindowResize() {

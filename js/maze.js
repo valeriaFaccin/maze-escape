@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 
 let current;
-let goal;
 
+const CELLSIZE = 50;
 class Maze {
     constructor(size, rows, columns) {
         this.size = size;
@@ -14,6 +14,7 @@ class Maze {
         this.rows = rows;
         this.grid = [];
         this.stack = [];
+        this.cellSize = CELLSIZE
     }
 
   // Set the grid: Create new this.grid array based on number of instance rows and columns
@@ -58,7 +59,7 @@ class Maze {
     // Construir labirinto
     // -----------------------
     buildMaze(scene, world, physics) {
-        const cellSize = 50;      // tamanho de cada célula no espaço 3D
+        const cellSize = this.cellSize;      // tamanho de cada célula no espaço 3D
         const wallHeight = 60;
         const wallThickness = 3;
 
@@ -200,7 +201,12 @@ class Maze {
         const cellW = w / cols;
         const cellH = h / rows;
 
+        this.markCellAsExplored(xPlayer, zPlayer, 1);
+
         ctx.clearRect(0, 0, w, h);
+         // Fundo escuro para áreas não exploradas
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, w, h);
 
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
@@ -212,43 +218,63 @@ class Maze {
                 const x = c * cellW;
                 const y = r * cellH;
 
-                if (cell.walls.topWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, y);
-                    ctx.lineTo(x + cellW, y);
-                    ctx.stroke();
+                // Só desenhar se a célula foi explorada
+                if (cell.explored) {
+                    // Fundo da célula explorada
+                    ctx.fillStyle = '#2a2a2a';
+                    ctx.fillRect(x, y, cellW, cellH);
+
+                    // Desenhar paredes apenas para células exploradas
+                    ctx.strokeStyle = 'white';
+                    
+                    if (cell.walls.topWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x + cellW, y);
+                        ctx.stroke();
+                    }
+
+                    if (cell.walls.rightWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x + cellW, y);
+                        ctx.lineTo(x + cellW, y + cellH);
+                        ctx.stroke();
+                    }
+
+                    if (cell.walls.bottomWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y + cellH);
+                        ctx.lineTo(x + cellW, y + cellH);
+                        ctx.stroke();
+                    }
+
+                    if (cell.walls.leftWall) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x, y + cellH);
+                        ctx.stroke();
+                    }
+
+                    // Desenhar objetivo se explorado
+                    if (cell.goal) {
+                        ctx.fillStyle = 'red';
+                        ctx.fillRect(
+                            x + cellW * 0.25,
+                            y + cellH * 0.25,
+                            cellW * 0.5,
+                            cellH * 0.5
+                        );
+                    }
+                }  else {
+                    // Área não explorada - mostrar como névoa
+                    ctx.fillStyle = '#0a0a0a';
+                    ctx.fillRect(x, y, cellW, cellH);
+                    
+                    // Opcional: adicionar padrão de névoa
+                    ctx.fillStyle = '#151515';
+                    ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
                 }
 
-                if (cell.walls.rightWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x + cellW, y);
-                    ctx.lineTo(x + cellW, y + cellH);
-                    ctx.stroke();
-                }
-
-                if (cell.walls.bottomWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, y + cellH);
-                    ctx.lineTo(x + cellW, y + cellH);
-                    ctx.stroke();
-                }
-
-                if (cell.walls.leftWall) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, y);
-                    ctx.lineTo(x, y + cellH);
-                    ctx.stroke();
-                }
-
-                if (cell.goal) {
-                    ctx.fillStyle = 'red';
-                    ctx.fillRect(
-                        x + cellW * 0.25,
-                        y + cellH * 0.25,
-                        cellW * 0.5,
-                        cellH * 0.5
-                    );
-                }
             }
         }
 
@@ -262,13 +288,32 @@ class Maze {
 
         ctx.beginPath();
         ctx.arc(
-            (px / (this.columns * 50)) * canvas.width,
-            (pz / (this.rows * 50)) * canvas.height,
+            (px / (this.columns * this.cellSize)) * canvas.width,
+            (pz / (this.rows * this.cellSize)) * canvas.height,
             8,
             0,
             Math.PI * 2
         );
         ctx.fill();
+    }
+
+    // Adicionar este método na classe Maze
+    markCellAsExplored(worldX, worldZ, explorationRadius = 1) {
+        const cellSize = 40; // mesmo valor usado em buildMaze
+        
+        // Converter coordenadas do mundo para coordenadas da grid
+        const gridCol = Math.floor(worldX / cellSize);
+        const gridRow = Math.floor(worldZ / cellSize);
+        
+        // Marcar célula atual e células adjacentes como exploradas
+        for (let r = gridRow - explorationRadius; r <= gridRow + explorationRadius; r++) {
+            for (let c = gridCol - explorationRadius; c <= gridCol + explorationRadius; c++) {
+                // Verificar se está dentro dos limites da grid
+                if (r >= 0 && r < this.rows && c >= 0 && c < this.columns) {
+                    this.grid[r][c].explored = true;
+                }
+            }
+        }
     }
 }
 
@@ -278,6 +323,7 @@ class Cell {
         this.rowNum = rowNum;
         this.colNum = colNum;
         this.visited = false;
+        this.explored = false;
         this.walls = {
         topWall: true,
         rightWall: true,

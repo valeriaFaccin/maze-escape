@@ -86,4 +86,13 @@ export class PhysicsEngine {
         // Se precisar limpar bodies e contatos
         this.world.bodies.forEach(b => this.world.removeBody(b));
     }
+
+    checkWin(playerX, playerZ, maze, cellSize) {
+        const col = Math.floor(playerX / cellSize);
+        const row = Math.floor(playerZ / cellSize);
+
+        const cell = maze.grid[row]?.[col];
+        return cell?.goal || false;
+    }
+
 }
