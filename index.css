@@ -1,0 +1,14 @@
+#minimap {
+  position: fixed;
+  right: 2vw;
+  bottom: 2vh;
+  width: 12vmin;
+  height: 12vmin;
+  max-width: 150px;
+  max-height: 150px;
+  min-width: 80px;
+  min-height: 80px;
+  background: #111;
+  border: 2px solid #fff;
+  z-index: 10;
+}

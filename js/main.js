@@ -2,37 +2,51 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import {Maze} from './maze.js'
+import { Maze } from './maze.js'
 import { PhysicsEngine } from './physicsEngine.js';
 import * as CANNON from 'cannon-es';
+import GameTimer from './GameTimer.js';
+
+var gameTimer = new GameTimer(10*60);
 
 let camera, scene, renderer, controls, playerBody, cameraYaw, cameraPitch;
 let gamePaused = false;
 let objects = [];
 
-let character;
-const actions = {};
-let activeAction;
+// Configuração da câmera
+const CAMERA_MODE = 'first_person'; // 'first_person' ou 'third_person'
+const THIRD_PERSON_DISTANCE = 5;   // distância da câmera em 3ª pessoa
 
 const move = { forward: false, backward: false, left: false, right: false };
+let loadFinished = false;
 
-var mixer;
 var clock = new THREE.Clock();
-var loadFinished = false;
 
 let ambientLight, sunLight, dirLight, pointLight;
 
 var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
+const EYE_HEIGHT = 100;     // ~altura dos olhos
+
+// CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
+
+var createAnimatedState = function(fbx) {
+    return {
+        fbx,
+        mixer: new THREE.AnimationMixer(fbx),
+        actions: {},
+        active: null,
+    }
+}
 
 // LIGHT --------------------------------------------------------------------------------------------------------------------------------------
 
-var criaIluminacao = function(){
+var criaIluminacao = function() {
     luzAmbiente();
     luzSolar();
 }
 
-var luzSolar = function(){
+var luzSolar = function() {
     sunLight = new THREE.DirectionalLight(0xffffff, 1);
     sunLight.castShadow = true;
     sunLight.position.y = 900;
@@ -50,7 +64,7 @@ var luzSolar = function(){
     scene.add(sunLight);
 }
 
-var luzAmbiente = function(){
+var luzAmbiente = function() {
     ambientLight = new THREE.AmbientLight(0x2b3a55, 0.25);
     ambientLight.visible = true;
 
@@ -88,7 +102,7 @@ var loadObj = function(){
             });
             scene.add(obj);
             objects["lobao"] = obj;
-            obj.position.x = 90;
+            obj.position.x = obj.position.z = 360;
             obj.scale.x = obj.scale.y = obj.scale.z = 30;            
         },
         function(progress){
@@ -99,79 +113,124 @@ var loadObj = function(){
         }
     );
 
-        // Crie nós de orientação
+    // Crie nós de orientação
     cameraYaw = new THREE.Object3D();   // gira em Y (esquerda/direita)
     cameraPitch = new THREE.Object3D(); // gira em X (cima/baixo)
     cameraYaw.add(cameraPitch);
     cameraPitch.add(camera);
 
     // Offset dos olhos (em relação ao centro do corpo físico/personagem)
-    const EYE_HEIGHT = 1.6;     // ~altura dos olhos
     camera.position.set(0, 0, 0);            // a câmera fica no pitch; o pitch será posicionado no olho
     cameraPitch.position.set(0, EYE_HEIGHT, 0);
+    scene.add(cameraYaw);
 
     fbxLoader.load("assets/Character/avatar-idle.fbx",
-        function(obj) {
-            character = obj;
-            character.scale.x = character.scale.y = character.scale.z = 0.2;
-            character.position.x = -10;
-            character.position.y = 1;
-            character.position.z = 0;
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.position.x = -10;
+            fbx.position.y = 1;
+            fbx.position.z = 0;
 
-            scene.add(character);
-            mixer = new THREE.AnimationMixer(character);
+            scene.add(fbx);
 
-            actions.idle = mixer.clipAction(obj.animations[0]);
-            actions.idle.play();
-            loadFinished = true;
+            objects["jeomar"] = createAnimatedState(fbx);
+            objects["jeomar"].actions.idle = objects["jeomar"].mixer.clipAction(fbx.animations[0]);
+            objects["jeomar"].actions.idle.play();
+            objects["jeomar"].active = objects["jeomar"].actions.idle;
 
-   
-            // Acopla o rig de câmera ao personagem (na cabeça)
-            character.add(cameraYaw); // o yaw/pitch ficam como filhos do personagem
+            fbx.add(cameraYaw); // o yaw/pitch ficam como filhos do personagem
             cameraYaw.position.set(0, 0, 0);
 
-            activeAction = actions.idle;
-            loadRunningAnimation();
+            loadFinished = true;
+
+            loadAnimation(objects["jeomar"], "run", "assets/Character/avatar-running.fbx");
+            loadAnimation(objects["jeomar"], "hit", "assets/Character/got-hit.fbx");
+            loadAnimation(objects["jeomar"], "murdered", "assets/Character/brutally-assassinated.fbx");
         },
         function(progress){
-            console.log("vivo! "+(progress.loaded/progress.total)*100 + "%");
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
         },
         function(error){
-            console.log("morto " + error);
+            // console.log("morto " + error);
+        }
+    );
+
+    fbxLoader.load("assets/Villain/ninja-idle.fbx",
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.1;
+            fbx.position.x = -10;
+            fbx.position.y = 1;
+            fbx.position.z = 0;
+            scene.add(fbx);
+
+            objects["students"] = createAnimatedState(fbx);
+            objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
+
+            objects["students"].actions.tocaia.play();
+            objects["students"].active = objects["students"].actions.tocaia;
+
+            loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
+        },
+        function(progress){
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+        },
+        function(error){
+            // console.log("morto " + error);
+        }
+    );
+
+    fbxLoader.load("assets/macarena-dance.fbx",
+        function(fbx) {
+            fbx.scale.x = fbx.scale.y = fbx.scale.z = 0.2;
+            fbx.position.x = 340;
+            fbx.position.y = 0;
+            fbx.position.z = 340;
+            scene.add(fbx);
+
+            objects["macarena"] = createAnimatedState(fbx);
+            objects["macarena"].actions.dance = objects["macarena"].mixer.clipAction(fbx.animations[0]);
+
+            objects["macarena"].actions.dance.play();
+            objects["macarena"].active = objects["macarena"].actions.dance;
+        },
+        function(progress){
+            // console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
+        },
+        function(error){
+            // console.log("morto " + error);
         }
     );
 }
 
 // KEYBOARD EVENTS ----------------------------------------------------------------------------------------------------------------------------
+
 let mouseDX = 0, mouseDY = 0;
 let pitchLimit = THREE.MathUtils.degToRad(85);
 const yawSpeed = 0.002;   // sensibilidade horizontal
 const pitchSpeed = 0.002; // sensibilidade vertical
 
 const makeTheCharacterMove = () => {
-    document.addEventListener('keyup', (e) => {
-        setAction("run");
+    document.addEventListener('keydown', (e) => {
+        setAction(objects["jeomar"], "run");
+        if (e.code === 'KeyW') move.forward = true;
+        if (e.code === 'KeyS') move.backward = true;
+        if (e.code === 'KeyA') move.left = true;
+        if (e.code === 'KeyD') move.right = true;
+    });
 
+    document.addEventListener('keyup', (e) => {
+        setAction(objects["jeomar"], "idle");
         if (e.code === 'KeyW') move.forward = false;
         if (e.code === 'KeyS') move.backward = false;
         if (e.code === 'KeyA') move.left = false;
         if (e.code === 'KeyD') move.right = false;
     });
 
-
-    document.addEventListener('keydown', (e) => {
-        loadFinished = true;
-        setAction("idle");
-
-        if (e.code === 'KeyW') move.forward = true;
-        if (e.code === 'KeyS') move.backward = true;
-        if (e.code === 'KeyA') move.left = true;
-        if (e.code === 'KeyD') move.right = true;
-        if (e.code === 'Escape') pauseGame();
+    window.addEventListener('click', () => {
+        controls.lock();
+        gamePaused = false;
+        gameTimer.start();
     });
-
-    window.addEventListener('click', () => controls.lock());
-  
 
     document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
     document.addEventListener('mousemove', (e) => {
@@ -184,6 +243,17 @@ const makeTheCharacterMove = () => {
     window.addEventListener('blur', () => pauseGame());
 }
 
+function setupPointerLockPause() {
+    controls.addEventListener('lock', () => {
+        gamePaused = false;
+        gameTimer.start();
+    });
+
+    controls.addEventListener('unlock', () => {
+        pauseGame();
+    });
+}
+
 function applyLookRotation() {
     cameraYaw.rotation.y -= mouseDX * yawSpeed;
     cameraPitch.rotation.x -= mouseDY * pitchSpeed;
@@ -193,9 +263,7 @@ function applyLookRotation() {
 
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
 
-// -----------------------
 // Loop de animação + física
-// -----------------------
 function clampHorizontalVelocity(body, max) {
     const vx = body.velocity.x, vz = body.velocity.z;
     const speed = Math.hypot(vx, vz);
@@ -208,34 +276,30 @@ function clampHorizontalVelocity(body, max) {
 
 function pauseGame() {
     gamePaused = true;
+    gameTimer.pause();
     if (controls.isLocked) controls.unlock();
 }
-const MAX_SPEED = 25.5;      // m/s no plano XZ
-const FORCE = 300.0;        // aceleração (impulso por segundo)
+const MAX_SPEED = 35.5;      // m/s no plano XZ
+const FORCE = 600.0;        // aceleração (impulso por segundo)
 
-function loadRunningAnimation() {
-    fbxLoader.load("assets/Character/avatar-running.fbx", 
-        function(obj) {
-            const runClip = obj.animations[0];
-            actions.run = mixer.clipAction(runClip);
-        }
-    );
+var loadAnimation = function(state, name, url) {
+    fbxLoader.load(url, function(fbx) {
+        const action = state.mixer.clipAction(fbx.animations[0]);
+        state.actions[name] = action;
+    });
 }
 
-function setAction(name) {
-    const newAction = actions[name];
-    if (!newAction || newAction === activeAction) return;
+var setAction = function(state, name) {
+    const newAction = state.actions[name];
+    if (!newAction || newAction === state.active) return;
 
-    activeAction.fadeOut(0.2);
+    if (state.active) {
+        state.active.fadeOut(0.2);
+    }
 
-    newAction
-        .reset()
-        .fadeIn(0.2)
-        .play();
-
-    activeAction = newAction;
+    newAction.reset().fadeIn(0.2).play();
+    state.active = newAction;
 }
-
 
 function getForwardVector() {
     // Extrai direção “para frente” do rig (ignora componente Y para manter no plano)
@@ -243,6 +307,7 @@ function getForwardVector() {
     forward.y = 0; forward.normalize();
     return forward;
 }
+
 function getRightVector() {
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cameraYaw.quaternion);
     right.y = 0; right.normalize();
@@ -281,16 +346,44 @@ function movePlayer(dt) {
     }
 }
 
-var nossaAnimacao = function (playerBody, world) {
+var nossaAnimacao = function (world, maze) {
 
     if (gamePaused) return;
-    if(!loadFinished) return;
+    if (!loadFinished) return;
 
+    let delta = clock.getDelta();
+
+    for (const key in objects) {
+        const obj = objects[key];
+        if (obj.mixer) {
+            obj.mixer.update(delta);
+        }
+    }
     console.log("entrou na animacao");
     // dt com limite para estabilidade
-    const dt = Math.min(clock.getDelta(), 1 / 30);
+    const dt = Math.min(delta, 1 / 30);
     // Direções baseadas na câmera
 
+    // Atualiza mixers
+    for (const key in objects) {
+        const obj = objects[key];
+        if (obj.mixer) {
+            obj.mixer.update(dt);
+        }
+    }
+
+    if (gamePaused || !loadFinished) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    gameTimer.update(dt);
+    const timerEl = document.getElementById('timer');
+    if (timerEl) {
+        timerEl.innerText = gameTimer.getFormatted();
+    }
+
+    // Direções baseadas na câmera
     const forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
     forward.y = 0; forward.normalize();
@@ -332,10 +425,25 @@ var nossaAnimacao = function (playerBody, world) {
 
     syncVisualFromPhysics();
     // Câmera segue o corpo
- 
+    let x = playerBody.position.x;
+    let z = playerBody.position.z;
+    
+    maze.drawMinimap(x, z);
     renderer.render(scene, camera);
 };
 
+function onPlayerHitByStudent() {
+    if (!loadFinished) return;
+
+    gameTimer.reduce(60);
+    setAction(objects["students"], "murder");
+    setAction(objects["jeomar"], "hit");
+
+    setTimeout(() => {
+        setAction(objects["students"], "tocaia");
+        setAction(objects["jeomar"], "idle");
+    }, 800);
+}
 
 function createCapsuleBody({
     radius = 0.35,         // raio do capsule (largura do corpo)
@@ -378,6 +486,25 @@ function createCapsuleBody({
     return body;
 }
 
+// TIMER --------------------------------------------------------------------------------------------------------------------------------------
+
+function gameOver() {
+    if (!loadFinished) return;
+
+    setAction(objects["jeomar"], "murdered");
+    pauseGame();
+    setTimeout(restartGame, 5000);
+}
+
+function restartGame() {
+    gameTimer.reset();
+    gamePaused = false;
+
+    playerBody.position.copy(new CANNON.Vec3(5, CAPSULE_HEIGHT/2 + 0.05, 5));
+    playerBody.velocity.setZero();
+
+    setAction(objects["jeomar"], "idle");
+}
 
 // GROUND -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -400,7 +527,7 @@ const createGround = () => {
 
     textures.forEach(tex => {
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(200, 200);
+        tex.repeat.set(50, 50);
         tex.anisotropy = 50;
     });
 
@@ -431,13 +558,15 @@ const createGround = () => {
 
 
 // INIT ---------------------------------------------------------------------------------------------------------------------------------------
-    const CAPSULE_HEIGHT = 1.7;
+
+const CAPSULE_HEIGHT = 1.7;
 
 export function init() {
+    document.getElementById('timer').innerText = gameTimer.getFormatted();
+
     const physicsEngine = new PhysicsEngine();
     let world = physicsEngine.world;
     let physics = physicsEngine.materials;
-
 
     camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
 
@@ -451,21 +580,20 @@ export function init() {
 
     document.body.appendChild(renderer.domElement);
     controls = new PointerLockControls(camera, renderer.domElement);
+    setupPointerLockPause();
 
     const maze = new Maze(20, 10, 10);
     maze.setup();
     maze.generateMaze();
     maze.buildMaze(scene, world, physics);
-
-     // Câmera: olhar para centro
-    camera.lookAt(new THREE.Vector3(maze.columns * 5, 1, maze.rows * 5));
+     // Câmera será posicionada pelo rig de câmera
 
     // Materiais previamente criados (conforme falamos antes)
     const playerMaterial = physics.playerMaterial;
 
     // Alturas
     const CAPSULE_RADIUS = 0.35;
-    const START = new CANNON.Vec3(5, CAPSULE_HEIGHT/2 + 0.05, 5);
+    const START = new CANNON.Vec3(0, CAPSULE_HEIGHT + 1, 0);  // Início do labirinto (célula 0,0)
   
     // Corpo físico
     playerBody = createCapsuleBody({
@@ -477,7 +605,6 @@ export function init() {
     });
     world.addBody(playerBody);
 
-
     criaIluminacao();
     createDirectionalLight();
     createPointLight();
@@ -485,7 +612,10 @@ export function init() {
     createGround();
     makeTheCharacterMove();
 
-    const animationLoop = () => nossaAnimacao(playerBody, world);
+    gameTimer.onTimeUp = gameOver;
+
+    const animationLoop = () => nossaAnimacao( world, maze);
+
     renderer.setAnimationLoop( animationLoop );
 
     document.body.appendChild( renderer.domElement );
@@ -493,23 +623,34 @@ export function init() {
     scene.fog = new THREE.Fog(0xcccccc, 10, 500);
 
     scene.fog = new THREE.Fog(0x0b1324, 20, 300);
-    character.visible = false
     window.addEventListener( 'resize', onWindowResize );
 }
 
-// O rig segue o corpo (personagem e câmera juntos)
+// Sincroniza visual com física, mas mantém câmera independente
 function syncVisualFromPhysics() {
   // posiciona o “root” do personagem no centro do corpo
-  character.position.set(
+  objects["jeomar"].fbx.position.set(
     playerBody.position.x,
-    playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés (ajuste conforme pivô do FBX)
+    playerBody.position.y - CAPSULE_HEIGHT/2,  // raiz do modelo nos pés
     playerBody.position.z
   );
 
-  // Também posiciona o rig (yaw/pitch) no centro do corpo
-  cameraYaw.position.set(playerBody.position.x, playerBody.position.y + 2, playerBody.position.z);
+  // Câmera independente da física - não é afetada pela gravidade
+  const targetCameraHeight = playerBody.position.y - CAPSULE_HEIGHT/2 + EYE_HEIGHT;
+  
+  if (CAMERA_MODE === 'first_person') {
+    // 1ª pessoa: câmera na posição dos olhos
+    cameraYaw.position.set(0, targetCameraHeight,0);
+  } else if (CAMERA_MODE === 'third_person') {
+    // 3ª pessoa: câmera atrás do jogador
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(cameraYaw.quaternion);
+    cameraYaw.position.set(
+      playerBody.position.x - forward.x * THIRD_PERSON_DISTANCE,
+      targetCameraHeight + 1, // um pouco mais alta em 3ª pessoa
+      playerBody.position.z - forward.z * THIRD_PERSON_DISTANCE
+    );
+  }
 }
-
 
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
