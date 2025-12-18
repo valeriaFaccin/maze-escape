@@ -40,4 +40,8 @@ export default class GameTimer {
         const s = Math.floor(this.remaining % 60);
         return `${m}:${s.toString().padStart(2, '0')}`;
     }
+
+    getRemaining() {
+        return this.remaining;
+    }
 }
