@@ -497,38 +497,6 @@ function getRightVector() {
     return right;
 }
 
-function movePlayer(dt) {
-    if (!controls.isLocked) return;
-
-    const forward = getForwardVector();
-    const right   = getRightVector();
-
-    const moveVec = new THREE.Vector3();
-    if (move.forward)  moveVec.add(forward);
-    if (move.backward) moveVec.addScaledVector(forward, -1);
-    if (move.left)     moveVec.addScaledVector(right, -1);
-    if (move.right)    moveVec.add(right);
-
-    if (moveVec.lengthSq() > 0) {
-        moveVec.normalize();
-        playerBody.wakeUp();
-
-        // Aplicar força horizontal
-        const fx = moveVec.x * FORCE;
-        const fz = moveVec.z * FORCE;
-        playerBody.applyForce(new CANNON.Vec3(fx, 0, fz), playerBody.position);
-
-        // Limitar velocidade horizontal
-        const vx = playerBody.velocity.x, vz = playerBody.velocity.z;
-        const speed = Math.hypot(vx, vz);
-        if (speed > MAX_SPEED) {
-            const s = MAX_SPEED / speed;
-            playerBody.velocity.x *= s;
-            playerBody.velocity.z *= s;
-        }
-    }
-}
-
 var nossaAnimacao = function () {
     // console.log("gamePaused", gamePaused);
     // console.log("loadFinished", loadFinished);
@@ -626,8 +594,8 @@ function onPlayerHitByStudent() {
 }
 
 function createCapsuleBody({
-    radius = 0.35,         // raio do capsule (largura do corpo)
-    height = 1.7,          // altura total (pés até topo da cabeça)
+    radius =2,         // raio do capsule (largura do corpo)
+    height = 10,          // altura total (pés até topo da cabeça)
     mass = 80,
     material,
     start = new CANNON.Vec3(0, height/2 + 0.05, 0),
@@ -740,7 +708,7 @@ const createGround = () => {
 
 // INIT ---------------------------------------------------------------------------------------------------------------------------------------
 
-const CAPSULE_HEIGHT = 1.7;
+const CAPSULE_HEIGHT = 15;
 var physicsEngine;
 
 export function init() {
@@ -785,7 +753,7 @@ export function init() {
     const playerMaterial = physics.playerMaterial;
 
     // Alturas
-    const CAPSULE_RADIUS = 0.35;
+    const CAPSULE_RADIUS = 7;
     const START = new CANNON.Vec3(0, CAPSULE_HEIGHT + 1, 0);  // Início do labirinto (célula 0,0)
   
     // Corpo físico
