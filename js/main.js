@@ -5,6 +5,9 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { Maze } from './maze.js'
 import { PhysicsEngine } from './physicsEngine.js';
 import * as CANNON from 'cannon-es';
+import GameTimer from './GameTimer.js';
+
+var gameTimer = new GameTimer(10*60);
 
 let camera, scene, renderer, controls, playerBody, cameraYaw, cameraPitch;
 let gamePaused = false;
@@ -215,8 +218,11 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyD') move.right = false;
     });
 
-    window.addEventListener('click', () => controls.lock());
-  
+    window.addEventListener('click', () => {
+        controls.lock();
+        gamePaused = false;
+        gameTimer.start();
+    });
 
     document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
     document.addEventListener('mousemove', (e) => {
@@ -227,6 +233,17 @@ const makeTheCharacterMove = () => {
     });
 
     window.addEventListener('blur', () => pauseGame());
+}
+
+function setupPointerLockPause() {
+    controls.addEventListener('lock', () => {
+        gamePaused = false;
+        gameTimer.start();
+    });
+
+    controls.addEventListener('unlock', () => {
+        pauseGame();
+    });
 }
 
 function applyLookRotation() {
@@ -251,8 +268,10 @@ function applyLookRotation() {
 
 function pauseGame() {
     gamePaused = true;
+    gameTimer.pause();
     if (controls.isLocked) controls.unlock();
 }
+
 const MAX_SPEED = 25.5;      // m/s no plano XZ
 const FORCE = 300.0;        // aceleração (impulso por segundo)
 
@@ -321,23 +340,30 @@ function movePlayer(dt) {
 }
 
 var nossaAnimacao = function (playerBody, world) {
-    let delta = clock.getDelta();
-
-    for (const key in objects) {
-        const obj = objects[key];
-        if (obj.mixer) {
-            obj.mixer.update(delta);
-        }
-    }
-
-    if (gamePaused) return;
-    if (!loadFinished) return;
-
     console.log("entrou na animacao");
     // dt com limite para estabilidade
     const dt = Math.min(clock.getDelta(), 1 / 30);
-    // Direções baseadas na câmera
 
+    // Atualiza mixers
+    for (const key in objects) {
+        const obj = objects[key];
+        if (obj.mixer) {
+            obj.mixer.update(dt);
+        }
+    }
+
+    if (gamePaused || !loadFinished) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    gameTimer.update(dt);
+    const timerEl = document.getElementById('timer');
+    if (timerEl) {
+        timerEl.innerText = gameTimer.getFormatted();
+    }
+
+    // Direções baseadas na câmera
     const forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
     forward.y = 0; forward.normalize();
@@ -383,6 +409,18 @@ var nossaAnimacao = function (playerBody, world) {
     renderer.render(scene, camera);
 };
 
+function onPlayerHitByStudent() {
+    if (!loadFinished) return;
+
+    gameTimer.reduce(60);
+    setAction(objects["students"], "murder");
+    setAction(objects["jeomar"], "hit");
+
+    setTimeout(() => {
+        setAction(objects["students"], "tocaia");
+        setAction(objects["jeomar"], "idle");
+    }, 800);
+}
 
 function createCapsuleBody({
     radius = 0.35,         // raio do capsule (largura do corpo)
@@ -423,6 +461,26 @@ function createCapsuleBody({
     body.addShape(bottomSphere, new CANNON.Vec3(0, -cylinderHeight/2, 0));
 
     return body;
+}
+
+// TIMER --------------------------------------------------------------------------------------------------------------------------------------
+
+function gameOver() {
+    if (!loadFinished) return;
+
+    setAction(objects["jeomar"], "murdered");
+    pauseGame();
+    setTimeout(restartGame, 5000);
+}
+
+function restartGame() {
+    gameTimer.reset();
+    gamePaused = false;
+
+    playerBody.position.copy(new CANNON.Vec3(5, CAPSULE_HEIGHT/2 + 0.05, 5));
+    playerBody.velocity.setZero();
+
+    setAction(objects["jeomar"], "idle");
 }
 
 // GROUND -------------------------------------------------------------------------------------------------------------------------------------
@@ -481,10 +539,11 @@ const createGround = () => {
 const CAPSULE_HEIGHT = 1.7;
 
 export function init() {
+    document.getElementById('timer').innerText = gameTimer.getFormatted();
+
     const physicsEngine = new PhysicsEngine();
     let world = physicsEngine.world;
     let physics = physicsEngine.materials;
-
 
     camera = new THREE.PerspectiveCamera( 100, window.innerWidth / window.innerHeight, 0.1, 2000 );
 
@@ -498,6 +557,7 @@ export function init() {
 
     document.body.appendChild(renderer.domElement);
     controls = new PointerLockControls(camera, renderer.domElement);
+    setupPointerLockPause();
 
     const maze = new Maze(20, 10, 10);
     maze.setup();
@@ -530,6 +590,8 @@ export function init() {
     loadObj();
     createGround();
     makeTheCharacterMove();
+
+    gameTimer.onTimeUp = gameOver;
 
     const animationLoop = () => nossaAnimacao(playerBody, world);
     renderer.setAnimationLoop( animationLoop );
