@@ -7,7 +7,7 @@ import { PhysicsEngine } from './physicsEngine.js';
 import * as CANNON from 'cannon-es';
 import GameTimer from './GameTimer.js';
 
-var gameTimer = new GameTimer(1*30);
+var gameTimer = new GameTimer(10*60);
 
 // Adicionar no início do main.js
 let gameState = {
@@ -354,13 +354,13 @@ var loadObj = function(){
             fbx.position.z = 0;
             scene.add(fbx);
 
-            // objects["students"] = createAnimatedState(fbx);
-            // objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
+            objects["students"] = createAnimatedState(fbx);
+            objects["students"].actions.tocaia = objects["students"].mixer.clipAction(fbx.animations[0]);
 
-            // objects["students"].actions.tocaia.play();
-            // objects["students"].active = objects["students"].actions.tocaia;
+            objects["students"].actions.tocaia.play();
+            objects["students"].active = objects["students"].actions.tocaia;
 
-            // loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
+            loadAnimation(objects["students"], "murder", "assets/Villain/brutal-assassination.fbx");
         },
         function(progress){
             console.log("vivo! " + (progress.loaded/progress.total)*100 + "%");
@@ -404,7 +404,7 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyD') move.right = true;
 
         if ((move.forward || move.backward || move.left || move.right) && animationWalking) {
-            // setAction(objects["jeomar"], "murdered");
+            setAction(objects["jeomar"], "run");
         }
     });
 
@@ -415,7 +415,7 @@ const makeTheCharacterMove = () => {
         if (e.code === 'KeyD') move.right = false;
 
         if (!move.forward && !move.backward && !move.left && !move.right && animationWalking) {
-            // setAction(objects["jeomar"], "murdered");
+            setAction(objects["jeomar"], "idle");
         }
     });
 
