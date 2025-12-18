@@ -201,7 +201,7 @@ class Maze {
         const cellW = w / cols;
         const cellH = h / rows;
 
-        this.markCellAsExplored(xPlayer, zPlayer, 1);
+        this.markCellAsExplored(xPlayer, zPlayer);
 
         ctx.clearRect(0, 0, w, h);
          // Fundo escuro para áreas não exploradas
@@ -285,12 +285,17 @@ class Maze {
         const canvas = document.getElementById('minimap');
 
         ctx.fillStyle = 'lime';
+        const cellX = Math.floor(px / this.cellSize);
+        const cellZ = Math.floor(pz / this.cellSize);
 
+        // centro da célula
+        const centerX = (cellX + 0.5) * this.cellSize;
+        const centerZ = (cellZ + 0.5) * this.cellSize;
         ctx.beginPath();
         ctx.arc(
-            (px / (this.columns * this.cellSize)) * canvas.width,
-            (pz / (this.rows * this.cellSize)) * canvas.height,
-            8,
+            (centerX / (this.columns * this.cellSize)) * canvas.width,
+            (centerZ / (this.rows * this.cellSize)) * canvas.height,
+            7,
             0,
             Math.PI * 2
         );
@@ -298,21 +303,33 @@ class Maze {
     }
 
     // Adicionar este método na classe Maze
-    markCellAsExplored(worldX, worldZ, explorationRadius = 1) {
-        const cellSize = 40; // mesmo valor usado em buildMaze
-        
+    markCellAsExplored(worldX, worldZ, explorationRadius = 0) {        
         // Converter coordenadas do mundo para coordenadas da grid
-        const gridCol = Math.floor(worldX / cellSize);
-        const gridRow = Math.floor(worldZ / cellSize);
-        
-        // Marcar célula atual e células adjacentes como exploradas
-        for (let r = gridRow - explorationRadius; r <= gridRow + explorationRadius; r++) {
-            for (let c = gridCol - explorationRadius; c <= gridCol + explorationRadius; c++) {
-                // Verificar se está dentro dos limites da grid
-                if (r >= 0 && r < this.rows && c >= 0 && c < this.columns) {
-                    this.grid[r][c].explored = true;
-                }
-            }
+        const col = Math.floor(worldX / this.cellSize);
+        const row = Math.floor(worldZ / this.cellSize);
+        if (!(row >= 0 && row < this.rows && col >= 0 && col < this.columns)) return ;
+
+        const cell = this.grid[row][col];
+        cell.explored = true;
+
+        // Cima
+        if (!cell.walls.topWall && row > 0) {
+            this.grid[row - 1][col].explored = true;
+        }
+
+        // Baixo
+        if (!cell.walls.bottomWall && row < this.rows - 1) {
+            this.grid[row + 1][col].explored = true;
+        }
+
+        // Esquerda
+        if (!cell.walls.leftWall && col > 0) {
+            this.grid[row][col - 1].explored = true;
+        }
+
+        // Direita
+        if (!cell.walls.rightWall && col < this.columns - 1) {
+            this.grid[row][col + 1].explored = true;
         }
     }
 }

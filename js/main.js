@@ -7,7 +7,7 @@ import { PhysicsEngine } from './physicsEngine.js';
 import * as CANNON from 'cannon-es';
 import GameTimer from './GameTimer.js';
 
-var gameTimer = new GameTimer(1*60);
+var gameTimer = new GameTimer(10*60);
 
 // Adicionar no início do main.js
 let gameState = {
@@ -562,7 +562,7 @@ var nossaAnimacao = function () {
     }
     console.log("entrou na animacao");
     // dt com limite para estabilidade
-    const dt = Math.min(clock.getDelta(), 1 / 30);
+    const dt = Math.min(delta, 1 / 30);
     // Direções baseadas na câmera
 
     if (gamePaused || !loadFinished) {
