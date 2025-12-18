@@ -23,7 +23,7 @@ let ambientLight, sunLight, dirLight, pointLight;
 
 var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
-const EYE_HEIGHT = 100;     // ~altura dos olhos
+const EYE_HEIGHT = 20;     // ~altura dos olhos
 
 // CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
 
@@ -243,15 +243,15 @@ function applyLookRotation() {
 // ANIMATION ----------------------------------------------------------------------------------------------------------------------------------
 
 // Loop de animação + física
-// function clampHorizontalVelocity(body, max) {
-//     const vx = body.velocity.x, vz = body.velocity.z;
-//     const speed = Math.hypot(vx, vz);
-//     if (speed > max) {
-//         const s = max / speed;
-//         body.velocity.x *= s;
-//         body.velocity.z *= s;
-//     }
-// }
+function clampHorizontalVelocity(body, max) {
+    const vx = body.velocity.x, vz = body.velocity.z;
+    const speed = Math.hypot(vx, vz);
+    if (speed > max) {
+        const s = max / speed;
+        body.velocity.x *= s;
+        body.velocity.z *= s;
+    }
+}
 
 function pauseGame() {
     gamePaused = true;
@@ -351,30 +351,30 @@ var nossaAnimacao = function (world, maze) {
     // Movimento (aplica velocidade ao corpo físico, não move diretamente a câmera)
 
     console.log("controls.isLocked", controls.isLocked);
-    // if (controls.isLocked) {
-    //     const moveVec = new THREE.Vector3();
-    //     if (move.forward)  moveVec.add(forward);
-    //     if (move.backward) moveVec.addScaledVector(forward, -1);
-    //     if (move.left)     moveVec.addScaledVector(right, -1);
-    //     if (move.right)    moveVec.add(right);
-    //     console.log("move", move);
-    //     if (moveVec.lengthSq() > 0) {
-    //         moveVec.normalize();
+    if (controls.isLocked) {
+        const moveVec = new THREE.Vector3();
+        if (move.forward)  moveVec.add(forward);
+        if (move.backward) moveVec.addScaledVector(forward, -1);
+        if (move.left)     moveVec.addScaledVector(right, -1);
+        if (move.right)    moveVec.add(right);
+        console.log("move", move);
+        if (moveVec.lengthSq() > 0) {
+            moveVec.normalize();
 
 
-    //         // garanta que não está dormindo ao aplicar input
-    //         playerBody.wakeUp();
-    //         console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
+            // garanta que não está dormindo ao aplicar input
+            playerBody.wakeUp();
+            console.log('sleeping?', playerBody.sleepState); // 0: awake, 1: sleepy, 2: sleeping
 
-    //         // aceleração acumulada em velocidade no plano XZ
-    //         playerBody.velocity.x += moveVec.x * FORCE * dt;
-    //         playerBody.velocity.z += moveVec.z * FORCE * dt;
-    //         console.log(playerBody.velocity.x);
-    //         console.log(playerBody.velocity.z);
-    //     } 
+            // aceleração acumulada em velocidade no plano XZ
+            playerBody.velocity.x += moveVec.x * FORCE * dt;
+            playerBody.velocity.z += moveVec.z * FORCE * dt;
+            console.log(playerBody.velocity.x);
+            console.log(playerBody.velocity.z);
+        } 
 
-    //     clampHorizontalVelocity(playerBody, MAX_SPEED);
-    // }
+        clampHorizontalVelocity(playerBody, MAX_SPEED);
+    }
     applyLookRotation();       // do mouse → yaw/pitch
     movePlayer(dt);            // forças/velocidade
 
