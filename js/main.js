@@ -23,7 +23,7 @@ let ambientLight, sunLight, dirLight, pointLight;
 
 var objLoader = new OBJLoader();
 var fbxLoader = new FBXLoader();
-const EYE_HEIGHT = 20;     // ~altura dos olhos
+const EYE_HEIGHT = 100;     // ~altura dos olhos
 
 // CREATE CHARACTER ---------------------------------------------------------------------------------------------------------------------------
 
@@ -134,6 +134,10 @@ var loadObj = function(){
             objects["jeomar"].actions.idle = objects["jeomar"].mixer.clipAction(fbx.animations[0]);
             objects["jeomar"].actions.idle.play();
             objects["jeomar"].active = objects["jeomar"].actions.idle;
+
+            fbx.add(cameraYaw); // o yaw/pitch ficam como filhos do personagem
+            cameraYaw.position.set(0, 0, 0);
+
             loadFinished = true;
 
             loadAnimation(objects["jeomar"], "run", "assets/Character/avatar-running.fbx");
@@ -257,8 +261,8 @@ function pauseGame() {
     gamePaused = true;
     if (controls.isLocked) controls.unlock();
 }
-const MAX_SPEED = 25.5;      // m/s no plano XZ
-const FORCE = 300.0;        // aceleração (impulso por segundo)
+const MAX_SPEED = 35.5;      // m/s no plano XZ
+const FORCE = 600.0;        // aceleração (impulso por segundo)
 
 var loadAnimation = function(state, name, url) {
     fbxLoader.load(url, function(fbx) {
